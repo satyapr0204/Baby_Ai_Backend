@@ -1260,6 +1260,7 @@ const updateBanner = async (req, res, next) => {
   }
 };
 
+
 const allBanners = async (req, res, next) => {
   try {
     const banners = await Banner.findAll();
