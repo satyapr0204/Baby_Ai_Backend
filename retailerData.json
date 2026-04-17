@@ -1,0 +1,292 @@
+[
+    {
+        "id": 1,
+        "retailer_id": "#RE-12345",
+        "retailer_name": "Benny Hernandez",
+        "status": "Active",
+        "products_count": 53,
+        "addon_price": 40,
+        "discount": 30,
+        "categories": [
+            "T-Shirts",
+            "Traditional Wear"
+        ],
+        "available_categories": [
+            "T-Shirts",
+            "Nightwear",
+            "Bodysuits",
+            "Shorts",
+            "Dresses",
+            "Jackets",
+            "Co-ord Sets",
+            "Traditional Wear",
+            "Party Wear",
+            "Casual Wear",
+            "Winter Wear",
+            "Summer Wear"
+        ],
+        "email": "benny.h@example.com",
+        "last_sync": "2026-04-08T10:00:00Z"
+    },
+    {
+        "id": 2,
+        "retailer_id": "#RE-12346",
+        "retailer_name": "Alex Cruz",
+        "status": "Inactive",
+        "products_count": 43,
+        "addon_price": 40,
+        "discount": 30,
+        "categories": [
+            "Nightwear",
+            "Shorts"
+        ],
+        "available_categories": [
+            "T-Shirts",
+            "Nightwear",
+            "Bodysuits",
+            "Shorts",
+            "Dresses",
+            "Jackets",
+            "Co-ord Sets",
+            "Traditional Wear",
+            "Party Wear",
+            "Casual Wear",
+            "Winter Wear",
+            "Summer Wear"
+        ],
+        "email": "alex.c@example.com",
+        "last_sync": "2026-04-07T15:30:00Z"
+    },
+    {
+        "id": 3,
+        "retailer_id": "#RE-12347",
+        "retailer_name": "Julia Jensen",
+        "status": "Active",
+        "products_count": 35,
+        "addon_price": 40,
+        "discount": 30,
+        "categories": [
+            "Dresses",
+            "Party Wear"
+        ],
+        "available_categories": [
+            "T-Shirts",
+            "Nightwear",
+            "Bodysuits",
+            "Shorts",
+            "Dresses",
+            "Jackets",
+            "Co-ord Sets",
+            "Traditional Wear",
+            "Party Wear",
+            "Casual Wear",
+            "Winter Wear",
+            "Summer Wear"
+        ],
+        "email": "julia.j@example.com",
+        "last_sync": "2026-04-08T09:15:00Z"
+    },
+    {
+        "id": 4,
+        "retailer_id": "#RE-12348",
+        "retailer_name": "Otis Harvey",
+        "status": "Inactive",
+        "products_count": 45,
+        "addon_price": 40,
+        "discount": 30,
+        "categories": [
+            "Bodysuits",
+            "Casual Wear"
+        ],
+        "available_categories": [
+            "T-Shirts",
+            "Nightwear",
+            "Bodysuits",
+            "Shorts",
+            "Dresses",
+            "Jackets",
+            "Co-ord Sets",
+            "Traditional Wear",
+            "Party Wear",
+            "Casual Wear",
+            "Winter Wear",
+            "Summer Wear"
+        ],
+        "email": "otis.h@example.com",
+        "last_sync": "2026-04-06T11:20:00Z"
+    },
+    {
+        "id": 5,
+        "retailer_id": "#RE-12349",
+        "retailer_name": "Forrest Watkins",
+        "status": "Active",
+        "products_count": 56,
+        "addon_price": 40,
+        "discount": 30,
+        "categories": [
+            "Jackets",
+            "Winter Wear"
+        ],
+        "available_categories": [
+            "T-Shirts",
+            "Nightwear",
+            "Bodysuits",
+            "Shorts",
+            "Dresses",
+            "Jackets",
+            "Co-ord Sets",
+            "Traditional Wear",
+            "Party Wear",
+            "Casual Wear",
+            "Winter Wear",
+            "Summer Wear"
+        ],
+        "email": "forrest.w@example.com",
+        "last_sync": "2026-04-08T12:45:00Z"
+    },
+    {
+        "id": 6,
+        "retailer_id": "#RE-12350",
+        "retailer_name": "Vanessa Byrd",
+        "status": "Active",
+        "products_count": 15,
+        "addon_price": 40,
+        "discount": 20,
+        "categories": [
+            "Summer Wear",
+            "T-Shirts"
+        ],
+        "available_categories": [
+            "T-Shirts",
+            "Nightwear",
+            "Bodysuits",
+            "Shorts",
+            "Dresses",
+            "Jackets",
+            "Co-ord Sets",
+            "Traditional Wear",
+            "Party Wear",
+            "Casual Wear",
+            "Winter Wear",
+            "Summer Wear"
+        ],
+        "email": "vanessa.b@example.com",
+        "last_sync": "2026-04-08T08:00:00Z"
+    },
+    {
+        "id": 7,
+        "retailer_id": "#RE-12351",
+        "retailer_name": "Traci Simpson",
+        "status": "Active",
+        "products_count": 65,
+        "addon_price": 40,
+        "discount": 10,
+        "categories": [
+            "Co-ord Sets",
+            "Shorts"
+        ],
+        "available_categories": [
+            "T-Shirts",
+            "Nightwear",
+            "Bodysuits",
+            "Shorts",
+            "Dresses",
+            "Jackets",
+            "Co-ord Sets",
+            "Traditional Wear",
+            "Party Wear",
+            "Casual Wear",
+            "Winter Wear",
+            "Summer Wear"
+        ],
+        "email": "traci.s@example.com",
+        "last_sync": "2026-04-07T17:10:00Z"
+    },
+    {
+        "id": 8,
+        "retailer_id": "#RE-12352",
+        "retailer_name": "Leroy Santiago",
+        "status": "Active",
+        "products_count": 12,
+        "addon_price": 40,
+        "discount": 30,
+        "categories": [
+            "Traditional Wear"
+        ],
+        "available_categories": [
+            "T-Shirts",
+            "Nightwear",
+            "Bodysuits",
+            "Shorts",
+            "Dresses",
+            "Jackets",
+            "Co-ord Sets",
+            "Traditional Wear",
+            "Party Wear",
+            "Casual Wear",
+            "Winter Wear",
+            "Summer Wear"
+        ],
+        "email": "leroy.s@example.com",
+        "last_sync": "2026-04-08T13:20:00Z"
+    },
+    {
+        "id": 9,
+        "retailer_id": "#RE-12353",
+        "retailer_name": "Mabel Pruitt",
+        "status": "Inactive",
+        "products_count": 28,
+        "addon_price": 25,
+        "discount": 15,
+        "categories": [
+            "Nightwear",
+            "Winter Wear"
+        ],
+        "available_categories": [
+            "T-Shirts",
+            "Nightwear",
+            "Bodysuits",
+            "Shorts",
+            "Dresses",
+            "Jackets",
+            "Co-ord Sets",
+            "Traditional Wear",
+            "Party Wear",
+            "Casual Wear",
+            "Winter Wear",
+            "Summer Wear"
+        ],
+        "email": "mabel.p@example.com",
+        "last_sync": "2026-04-05T14:00:00Z"
+    },
+    {
+        "id": 10,
+        "retailer_id": "#RE-12354",
+        "retailer_name": "Ramon Moss",
+        "status": "Active",
+        "products_count": 89,
+        "addon_price": 50,
+        "discount": 35,
+        "categories": [
+            "T-Shirts",
+            "Shorts",
+            "Casual Wear"
+        ],
+        "available_categories": [
+            "T-Shirts",
+            "Nightwear",
+            "Bodysuits",
+            "Shorts",
+            "Dresses",
+            "Jackets",
+            "Co-ord Sets",
+            "Traditional Wear",
+            "Party Wear",
+            "Casual Wear",
+            "Winter Wear",
+            "Summer Wear"
+        ],
+        "email": "ramon.m@example.com",
+        "last_sync": "2026-04-08T11:50:00Z"
+    }
+]

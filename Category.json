@@ -1,0 +1,162 @@
+[
+    {
+        "category_id": "1",
+        "category_name": "Rompers",
+        "retailer_count": 67,
+        "total_products": 53,
+        "pricing": 400.00,
+        "category_image": "https://example.com/images/categories/rompers.png"
+    },
+    {
+        "category_id": "2",
+        "category_name": "Onesies",
+        "retailer_count": 45,
+        "total_products": 43,
+        "pricing": 400.00,
+        "category_image": "https://example.com/images/categories/onesies.png"
+    },
+    {
+        "category_id": "3",
+        "category_name": "Bodysuits",
+        "retailer_count": 72,
+        "total_products": 35,
+        "pricing": 400.00,
+        "category_image": "https://example.com/images/categories/bodysuits.png"
+    },
+    {
+        "category_id": "4",
+        "category_name": "Nightwear",
+        "retailer_count": 41,
+        "total_products": 45,
+        "pricing": 400.00,
+        "category_image": "https://example.com/images/categories/nightwear.png"
+    },
+    {
+        "category_id": "5",
+        "category_name": "T-Shirts",
+        "retailer_count": 46,
+        "total_products": 96,
+        "pricing": 400.00,
+        "category_image": "https://example.com/images/categories/tshirts.png"
+    },
+    {
+        "category_id": "6",
+        "category_name": "Sweaters",
+        "retailer_count": 69,
+        "total_products": 15,
+        "pricing": 400.00,
+        "category_image": "https://example.com/images/categories/sweaters.png"
+    },
+    {
+        "category_id": "7",
+        "category_name": "Dresses",
+        "retailer_count": 54,
+        "total_products": 85,
+        "pricing": 400.00,
+        "category_image": "https://example.com/images/categories/dresses.png"
+    },
+    {
+        "category_id": "8",
+        "category_name": "Party Wear",
+        "retailer_count": 85,
+        "total_products": 12,
+        "pricing": 400.00,
+        "category_image": "https://example.com/images/categories/party-wear.png"
+    },
+    {
+        "category_id": "9",
+        "category_name": "Jackets",
+        "retailer_count": 30,
+        "total_products": 28,
+        "pricing": 550.00,
+        "category_image": "https://example.com/images/categories/jackets.png"
+    },
+    {
+        "category_id": "10",
+        "category_name": "Pants & Shorts",
+        "retailer_count": 55,
+        "total_products": 64,
+        "pricing": 320.00,
+        "category_image": "https://example.com/images/categories/pants-shorts.png"
+    },
+    {
+        "category_id": "11",
+        "category_name": "Footwear",
+        "retailer_count": 22,
+        "total_products": 40,
+        "pricing": 600.00,
+        "category_image": "https://example.com/images/categories/footwear.png"
+    },
+    {
+        "category_id": "12",
+        "category_name": "Accessories",
+        "retailer_count": 94,
+        "total_products": 120,
+        "pricing": 150.00,
+        "category_image": "https://example.com/images/categories/accessories.png"
+    },
+    {
+        "category_id": "13",
+        "category_name": "Raincoats",
+        "retailer_count": 12,
+        "total_products": 8,
+        "pricing": 450.00,
+        "category_image": "https://example.com/images/categories/raincoats.png"
+    },
+    {
+        "category_id": "14",
+        "category_name": "Swimwear",
+        "retailer_count": 18,
+        "total_products": 22,
+        "pricing": 300.00,
+        "category_image": "https://example.com/images/categories/swimwear.png"
+    },
+    {
+        "category_id": "15",
+        "category_name": "Winter Suits",
+        "retailer_count": 49,
+        "total_products": 31,
+        "pricing": 800.00,
+        "category_image": "https://example.com/images/categories/winter-suits.png"
+    },
+    {
+        "category_id": "16",
+        "category_name": "Hoodies",
+        "retailer_count": 37,
+        "total_products": 50,
+        "pricing": 450.00,
+        "category_image": "https://example.com/images/categories/hoodies.png"
+    },
+    {
+        "category_id": "17",
+        "category_name": "Ethnic Wear",
+        "retailer_count": 25,
+        "total_products": 18,
+        "pricing": 900.00,
+        "category_image": "https://example.com/images/categories/ethnic-wear.png"
+    },
+    {
+        "category_id": "18",
+        "category_name": "Bibs & Burp Cloths",
+        "retailer_count": 88,
+        "total_products": 150,
+        "pricing": 50.00,
+        "category_image": "https://example.com/images/categories/bibs.png"
+    },
+    {
+        "category_id": "19",
+        "category_name": "Tracksuits",
+        "retailer_count": 42,
+        "total_products": 24,
+        "pricing": 700.00,
+        "category_image": "https://example.com/images/categories/tracksuits.png"
+    },
+    {
+        "category_id": "20",
+        "category_name": "Sleeping Bags",
+        "retailer_count": 15,
+        "total_products": 10,
+        "pricing": 350.00,
+        "category_image": "https://example.com/images/categories/sleeping-bags.png"
+    }
+]

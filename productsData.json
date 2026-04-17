@@ -1,0 +1,993 @@
+[
+    {
+        "product_id": 1,
+        "category_id": 1,
+        "product_name": "Cute Baby Mini Outfit",
+        "product_desc": "Perfect comfort for your little one",
+        "discounted_price": 249.99,
+        "actual_price": 349.99,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/product1_1.png",
+            "https://example.com/images/product1_2.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "0-3M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "3-6M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "6-12M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 1,
+                "color_name": "Blue",
+                "color_code": "#4A90E2"
+            },
+            {
+                "color_id": 2,
+                "color_name": "Yellow",
+                "color_code": "#FFD700"
+            }
+        ],
+        "materials": [
+            "Cotton",
+            "Polyester"
+        ],
+        "description": "Adorable mini outfit designed for babies. Soft cotton fabric ensures comfort."
+    },
+    {
+        "product_id": 2,
+        "category_id": 2,
+        "product_name": "Soft Woolen Romper",
+        "product_desc": "Warm and cozy for winters",
+        "discounted_price": 499.0,
+        "actual_price": 650.0,
+        "currency": "$",
+        "is_fav": true,
+        "product_images": [
+            "https://example.com/images/product2_1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "Newborn"
+            },
+            {
+                "size_id": 2,
+                "size_name": "0-6M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "6-12M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 4,
+                "color_name": "Pink",
+                "color_code": "#FFC0CB"
+            }
+        ],
+        "materials": [
+            "Wool"
+        ],
+        "description": "Premium quality woolen romper to keep your baby warm during chilly days."
+    },
+    {
+        "product_id": 3,
+        "category_id": 3,
+        "product_name": "Summer Cotton Frock",
+        "product_desc": "Lightweight and stylish summer wear",
+        "discounted_price": 150.0,
+        "actual_price": 210.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/product3_1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "6-12M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "12-18M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "18-24M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 3,
+                "color_name": "Red",
+                "color_code": "#FF4D4D"
+            }
+        ],
+        "materials": [
+            "Organic Cotton"
+        ],
+        "description": "A beautiful summer frock with floral prints, made from 100% organic cotton."
+    },
+    {
+        "product_id": 4,
+        "category_id": 2,
+        "product_name": "Denim Baby Jacket",
+        "product_desc": "Classic style for cool kids",
+        "discounted_price": 899.0,
+        "actual_price": 1200.0,
+        "currency": "$",
+        "is_fav": true,
+        "product_images": [
+            "https://example.com/images/denim1.png",
+            "https://example.com/images/denim2.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "12-18M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "18-24M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "2-3Y"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 7,
+                "color_name": "Dark Blue",
+                "color_code": "#00008B"
+            }
+        ],
+        "materials": [
+            "Denim"
+        ],
+        "description": "Trendy denim jacket that goes perfectly with any outfit."
+    },
+    {
+        "product_id": 5,
+        "category_id": 5,
+        "product_name": "Infant Sleep Suit",
+        "product_desc": "Ensures a peaceful sleep",
+        "discounted_price": 180.0,
+        "actual_price": 250.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/sleep1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "Newborn"
+            },
+            {
+                "size_id": 2,
+                "size_name": "0-3M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "3-6M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 5,
+                "color_name": "White",
+                "color_code": "#FFFFFF"
+            }
+        ],
+        "materials": [
+            "Soft Jersey"
+        ],
+        "description": "Extra soft sleep suit with easy-to-use snap buttons."
+    },
+    {
+        "product_id": 6,
+        "category_id": 4,
+        "product_name": "Party Wear Tuxedo",
+        "product_desc": "Gentleman look for your baby boy",
+        "discounted_price": 1200.0,
+        "actual_price": 1500.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/tux1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "6-12M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "12-18M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "18-24M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 8,
+                "color_name": "Black",
+                "color_code": "#000000"
+            }
+        ],
+        "materials": [
+            "Silk",
+            "Cotton"
+        ],
+        "description": "Formal tuxedo set for special occasions and birthday parties."
+    },
+    {
+        "product_id": 7,
+        "category_id": 1,
+        "product_name": "Organic Cotton Onesy",
+        "product_desc": "Daily wear essential",
+        "discounted_price": 99.0,
+        "actual_price": 150.0,
+        "currency": "$",
+        "is_fav": true,
+        "product_images": [
+            "https://example.com/images/onesy.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "Newborn"
+            },
+            {
+                "size_id": 2,
+                "size_name": "0-3M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "3-6M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 9,
+                "color_name": "Grey",
+                "color_code": "#808080"
+            }
+        ],
+        "materials": [
+            "100% Cotton"
+        ],
+        "description": "Simple and breathable onesy for everyday comfort."
+    },
+    {
+        "product_id": 8,
+        "category_id": 2,
+        "product_name": "Winter Puffer Jacket",
+        "product_desc": "Heavy protection for extreme cold",
+        "discounted_price": 1500.0,
+        "actual_price": 2000.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/puffer.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "12-18M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "18-24M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "2-3Y"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 3,
+                "color_name": "Red",
+                "color_code": "#FF4D4D"
+            }
+        ],
+        "materials": [
+            "Nylon",
+            "Down Feather"
+        ],
+        "description": "Water-resistant puffer jacket with fleece lining."
+    },
+    {
+        "product_id": 9,
+        "category_id": 1,
+        "product_name": "Casual Shorts Set",
+        "product_desc": "Perfect for park play",
+        "discounted_price": 299.0,
+        "actual_price": 400.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/shorts1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "6-12M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "12-18M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "18-24M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 6,
+                "color_name": "Green",
+                "color_code": "#2ECC71"
+            }
+        ],
+        "materials": [
+            "Cotton Blend"
+        ],
+        "description": "Durable shorts and tee set for active babies."
+    },
+    {
+        "product_id": 10,
+        "category_id": 2,
+        "product_name": "Knitted Baby Sweater",
+        "product_desc": "Handmade feel with modern style",
+        "discounted_price": 450.0,
+        "actual_price": 550.0,
+        "currency": "$",
+        "is_fav": true,
+        "product_images": [
+            "https://example.com/images/sweater.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "3-9M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "9-18M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "18-24M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 10,
+                "color_name": "Beige",
+                "color_code": "#F5F5DC"
+            }
+        ],
+        "materials": [
+            "Acrylic Wool"
+        ],
+        "description": "Soft knitted sweater that is gentle on baby's skin."
+    },
+    {
+        "product_id": 11,
+        "category_id": 1,
+        "product_name": "Baby Hoodie Set",
+        "product_desc": "Stylish hoodie with joggers",
+        "discounted_price": 650.0,
+        "actual_price": 800.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/hoodie1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "6-12M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "12-18M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "18-24M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 11,
+                "color_name": "Orange",
+                "color_code": "#FFA500"
+            }
+        ],
+        "materials": [
+            "Cotton Fleece"
+        ],
+        "description": "Comfortable hoodie set perfect for outings."
+    },
+    {
+        "product_id": 12,
+        "category_id": 5,
+        "product_name": "Baby Raincoat",
+        "product_desc": "Keep your baby dry in rain",
+        "discounted_price": 550.0,
+        "actual_price": 700.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/raincoat.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "12-18M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "18-24M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 12,
+                "color_name": "Sky Blue",
+                "color_code": "#87CEEB"
+            }
+        ],
+        "materials": [
+            "Waterproof Polyester"
+        ],
+        "description": "Lightweight raincoat with hood and cute prints."
+    },
+    {
+        "product_id": 13,
+        "category_id": 5,
+        "product_name": "Baby Pajama Set",
+        "product_desc": "Soft and cozy nightwear",
+        "discounted_price": 300.0,
+        "actual_price": 420.0,
+        "currency": "$",
+        "is_fav": true,
+        "product_images": [
+            "https://example.com/images/pajama.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "0-6M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "6-12M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "12-18M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 13,
+                "color_name": "Lavender",
+                "color_code": "#E6E6FA"
+            }
+        ],
+        "materials": [
+            "Cotton"
+        ],
+        "description": "Breathable pajama set ideal for a good night's sleep."
+    },
+    {
+        "product_id": 14,
+        "category_id": 5,
+        "product_name": "Baby Cap & Mittens Set",
+        "product_desc": "Protect your baby from cold",
+        "discounted_price": 120.0,
+        "actual_price": 180.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/cap.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "Newborn"
+            },
+            {
+                "size_id": 2,
+                "size_name": "0-3M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 14,
+                "color_name": "Cream",
+                "color_code": "#FFFDD0"
+            }
+        ],
+        "materials": [
+            "Wool"
+        ],
+        "description": "Warm cap and mitten combo for newborns."
+    },
+    {
+        "product_id": 15,
+        "category_id": 1,
+        "product_name": "Baby Sports Tracksuit",
+        "product_desc": "Activewear for little champs",
+        "discounted_price": 700.0,
+        "actual_price": 950.0,
+        "currency": "$",
+        "is_fav": true,
+        "product_images": [
+            "https://example.com/images/tracksuit.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "6-12M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "12-18M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "18-24M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 15,
+                "color_name": "Navy Blue",
+                "color_code": "#001F3F"
+            }
+        ],
+        "materials": [
+            "Polyester Blend"
+        ],
+        "description": "Flexible and breathable tracksuit for active babies."
+    },
+    {
+        "product_id": 16,
+        "category_id": 6,
+        "product_name": "Silicon Feeding Bib Set",
+        "product_desc": "Mess-free mealtime for your toddler",
+        "discounted_price": 120.0,
+        "actual_price": 199.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/bib1.png",
+            "https://example.com/images/bib2.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "4-12M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "12-24M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 16,
+                "color_name": "Mint Green",
+                "color_code": "#98FF98"
+            },
+            {
+                "color_id": 17,
+                "color_name": "Peach",
+                "color_code": "#FFDAB9"
+            }
+        ],
+        "materials": [
+            "Food Grade Silicone"
+        ],
+        "description": "Waterproof and adjustable silicone bibs with a deep pocket to catch falling food."
+    },
+    {
+        "product_id": 17,
+        "category_id": 7,
+        "product_name": "Soft Sole Pre-Walker Shoes",
+        "product_desc": "Support for those first tiny steps",
+        "discounted_price": 350.0,
+        "actual_price": 500.0,
+        "currency": "$",
+        "is_fav": true,
+        "product_images": [
+            "https://example.com/images/shoes1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "0-6M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "6-12M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "12-18M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 18,
+                "color_name": "Tan Brown",
+                "color_code": "#D2B48C"
+            }
+        ],
+        "materials": [
+            "Genuine Leather",
+            "Cotton Lining"
+        ],
+        "description": "Breathable and lightweight shoes with anti-slip soles, designed specifically for crawling and early walking."
+    },
+    {
+        "product_id": 18,
+        "category_id": 8,
+        "product_name": "Organic Bamboo Bath Towel",
+        "product_desc": "Ultra-soft hooded towel for newborn skin",
+        "discounted_price": 450.0,
+        "actual_price": 599.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/towel1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "Newborn-12M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "1-3Y"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 19,
+                "color_name": "Seafoam Green",
+                "color_code": "#93E9BE"
+            }
+        ],
+        "materials": [
+            "90% Bamboo",
+            "10% Cotton"
+        ],
+        "description": "Hypoallergenic hooded towel with cute bear ears, highly absorbent and soft."
+    },
+    {
+        "product_id": 19,
+        "category_id": 9,
+        "product_name": "Montessori Wooden Rattle Set",
+        "product_desc": "Natural wood toys for sensory development",
+        "discounted_price": 850.0,
+        "actual_price": 1100.0,
+        "currency": "$",
+        "is_fav": true,
+        "product_images": [
+            "https://example.com/images/rattle1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "3M+"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 20,
+                "color_name": "Natural Wood",
+                "color_code": "#DEB887"
+            }
+        ],
+        "materials": [
+            "Beech Wood"
+        ],
+        "description": "Chemical-free, hand-sanded wooden rattles designed for easy grip and safe teething."
+    },
+    {
+        "product_id": 20,
+        "category_id": 10,
+        "product_name": "Portable Baby Nest Bed",
+        "product_desc": "Cozy snuggling spot for supervised lounging",
+        "discounted_price": 1800.0,
+        "actual_price": 2500.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/nest1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "0-9M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "9-18M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 21,
+                "color_name": "Starry Grey",
+                "color_code": "#708090"
+            }
+        ],
+        "materials": [
+            "Breathable Mesh",
+            "Cotton Cover"
+        ],
+        "description": "Imitates the womb environment to provide a secure space for baby's rest."
+    },
+    {
+        "product_id": 21,
+        "category_id": 1,
+        "product_name": "Quilted Winter Overall",
+        "product_desc": "Full body warmth for outdoor trips",
+        "discounted_price": 1200.0,
+        "actual_price": 1600.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/overall1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "3-6M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "6-12M"
+            },
+            {
+                "size_id": 3,
+                "size_name": "12-24M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 22,
+                "color_name": "Mustard Yellow",
+                "color_code": "#FFDB58"
+            }
+        ],
+        "materials": [
+            "Polyester Fill",
+            "Fleece Lining"
+        ],
+        "description": "Insulated snowsuit with built-in mittens and booties for extreme cold."
+    },
+    {
+        "product_id": 22,
+        "category_id": 5,
+        "product_name": "UV Protection Baby Sun Hat",
+        "product_desc": "Stay safe under the sun",
+        "discounted_price": 150.0,
+        "actual_price": 250.0,
+        "currency": "$",
+        "is_fav": true,
+        "product_images": [
+            "https://example.com/images/hat1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "6-12M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "1-3Y"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 23,
+                "color_name": "Salmon Pink",
+                "color_code": "#FA8072"
+            }
+        ],
+        "materials": [
+            "UPF 50+ Nylon"
+        ],
+        "description": "Wide brim hat with adjustable chin strap and neck flap for beach days."
+    },
+    {
+        "product_id": 23,
+        "category_id": 6,
+        "product_name": "Anti-Colic Glass Bottle Set",
+        "product_desc": "Safe feeding with natural feel",
+        "discounted_price": 600.0,
+        "actual_price": 850.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/bottle1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "120ml (0M+)"
+            },
+            {
+                "size_id": 2,
+                "size_name": "240ml (3M+)"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 24,
+                "color_name": "Clear Blue",
+                "color_code": "#ADD8E6"
+            }
+        ],
+        "materials": [
+            "Borosilicate Glass",
+            "Silicone Nipple"
+        ],
+        "description": "Heat-resistant glass bottles with an advanced venting system to reduce gas."
+    },
+    {
+        "product_id": 24,
+        "category_id": 11,
+        "product_name": "Ergonomic Baby Carrier",
+        "product_desc": "Hands-free bonding for parents",
+        "discounted_price": 2500.0,
+        "actual_price": 3200.0,
+        "currency": "$",
+        "is_fav": true,
+        "product_images": [
+            "https://example.com/images/carrier1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "4-36 Months"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 25,
+                "color_name": "Midnight Black",
+                "color_code": "#1A1A1B"
+            }
+        ],
+        "materials": [
+            "Cool Air Mesh",
+            "Cotton Padding"
+        ],
+        "description": "M-position hip seat carrier with lumbar support and multiple carrying positions."
+    },
+    {
+        "product_id": 25,
+        "category_id": 1,
+        "product_name": "Lace Christening Gown",
+        "product_desc": "Elegant attire for special ceremonies",
+        "discounted_price": 1500.0,
+        "actual_price": 2200.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/gown1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "0-6M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "6-12M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 5,
+                "color_name": "Ivory White",
+                "color_code": "#FFFFF0"
+            }
+        ],
+        "materials": [
+            "Satin",
+            "Embroidery Lace"
+        ],
+        "description": "A luxury gown featuring delicate floral embroidery and a soft silk lining."
+    },
+    {
+        "product_id": 26,
+        "category_id": 7,
+        "product_name": "Rubber Sole Aqua Socks",
+        "product_desc": "Protection for pool and splash pads",
+        "discounted_price": 299.0,
+        "actual_price": 450.0,
+        "currency": "$",
+        "is_fav": false,
+        "product_images": [
+            "https://example.com/images/socks1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "6-12M"
+            },
+            {
+                "size_id": 2,
+                "size_name": "12-24M"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 26,
+                "color_name": "Dolphin Blue",
+                "color_code": "#007BA7"
+            }
+        ],
+        "materials": [
+            "Neoprene",
+            "Non-slip Rubber"
+        ],
+        "description": "Quick-dry water shoes that protect little feet from hot sand and slippery surfaces."
+    },
+    {
+        "product_id": 27,
+        "category_id": 9,
+        "product_name": "Soft Cloth Crinkle Book",
+        "product_desc": "First book for tactile exploration",
+        "discounted_price": 180.0,
+        "actual_price": 299.0,
+        "currency": "$",
+        "is_fav": true,
+        "product_images": [
+            "https://example.com/images/book1.png"
+        ],
+        "sizes": [
+            {
+                "size_id": 1,
+                "size_name": "0M+"
+            }
+        ],
+        "colors": [
+            {
+                "color_id": 27,
+                "color_name": "Multi-color",
+                "color_code": "linear-gradient(to right, red, yellow, blue)"
+            }
+        ],
+        "materials": [
+            "Fabric",
+            "Crinkle Paper"
+        ],
+        "description": "Tear-proof cloth book with high-contrast colors and sound-making pages."
+    }
+]
