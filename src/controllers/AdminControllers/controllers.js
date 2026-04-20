@@ -24,13 +24,109 @@ const Fabric = require("../../modals/ProductModal/fabric");
 const Color = require("../../modals/ProductModal/color");
 // const ExcelJS = require('exceljs');
 
+// const processBabyData = async (data) => {
+//   if (!data) return data;
+
+//   const isArray = Array.isArray(data);
+//   let users = isArray ? data : [data];
+
+//   users = users.map((u) => (typeof u.toJSON === "function" ? u.toJSON() : u));
+
+//   let fabricIds = new Set();
+//   let colorIds = new Set();
+
+//   const parseIds = (val) => {
+//     try {
+//       const p = typeof val === "string" ? JSON.parse(val || "[]") : val;
+//       return Array.isArray(p) ? p : [];
+//     } catch {
+//       return [];
+//     }
+//   };
+
+//   users.forEach((user) => {
+//     user.babies?.forEach((baby) => {
+//       parseIds(baby.fabric_preferences).forEach((id) =>
+//         fabricIds.add(id.toString()),
+//       );
+//       parseIds(baby.preferred_colors).forEach((id) =>
+//         colorIds.add(id.toString()),
+//       );
+//     });
+//   });
+
+//   const [fabrics, colors] = await Promise.all([
+//     fabricIds.size > 0
+//       ? Fabric.findAll({
+//           where: { id: Array.from(fabricIds) },
+//           attributes: ["id", "name"],
+//         })
+//       : [],
+//     colorIds.size > 0
+//       ? Color.findAll({
+//           where: { id: Array.from(colorIds) },
+//           attributes: ["id", "name"],
+//         })
+//       : [],
+//   ]);
+
+//   const fabricMap = Object.fromEntries(
+//     fabrics.map((f) => [f.id.toString(), f.name]),
+//   );
+//   const colorMap = Object.fromEntries(
+//     colors.map((c) => [c.id.toString(), c.name]),
+//   );
+
+//   users.forEach((user) => {
+//     if (user.babies) {
+//       user.babies = user.babies.map((baby) => {
+//         if (
+//           baby.baby_profile_image &&
+//           !baby.baby_profile_image.startsWith("http")
+//         ) {
+//           baby.baby_profile_image = `${process.env.BACKEND_URL}/baby-image/${baby.baby_profile_image}`;
+//         }
+
+//         const fIds = parseIds(baby.fabric_preferences);
+//         baby.fabric_preferences = fIds.map(
+//           (id) => fabricMap[id.toString()] || id,
+//         );
+
+//         const cIds = parseIds(baby.preferred_colors);
+//         baby.preferred_colors = cIds.map((id) => colorMap[id.toString()] || id);
+
+//         return baby;
+//       });
+//     }
+//   });
+
+//   return isArray ? users : users[0];
+// };
+
+
+
 const processBabyData = async (data) => {
   if (!data) return data;
 
   const isArray = Array.isArray(data);
-  let users = isArray ? data : [data];
+  let rawData = isArray ? data : [data];
 
-  users = users.map((u) => (typeof u.toJSON === "function" ? u.toJSON() : u));
+  // Convert to plain objects
+  rawData = rawData.map((d) => (typeof d.toJSON === "function" ? d.toJSON() : d));
+
+  // 1. Pata lagao ki ye User hai ya Baby
+  // Agar pehle element ke paas 'fabric_preferences' hai, matlab ye Baby array hai
+  const isDirectBabyArray = rawData.length > 0 && ('fabric_preferences' in rawData[0]);
+
+  let babiesToProcess = [];
+  if (isDirectBabyArray) {
+    babiesToProcess = rawData;
+  } else {
+    // Purana logic: User ke andar se babies nikaalo
+    rawData.forEach(user => {
+      if (user.babies) babiesToProcess.push(...user.babies);
+    });
+  }
 
   let fabricIds = new Set();
   let colorIds = new Set();
@@ -39,69 +135,48 @@ const processBabyData = async (data) => {
     try {
       const p = typeof val === "string" ? JSON.parse(val || "[]") : val;
       return Array.isArray(p) ? p : [];
-    } catch {
-      return [];
-    }
+    } catch { return []; }
   };
 
-  users.forEach((user) => {
-    user.babies?.forEach((baby) => {
-      parseIds(baby.fabric_preferences).forEach((id) =>
-        fabricIds.add(id.toString()),
-      );
-      parseIds(baby.preferred_colors).forEach((id) =>
-        colorIds.add(id.toString()),
-      );
-    });
+  // 2. IDs collect karein
+  babiesToProcess.forEach((baby) => {
+    parseIds(baby.fabric_preferences).forEach((id) => fabricIds.add(id.toString()));
+    parseIds(baby.preferred_colors).forEach((id) => colorIds.add(id.toString()));
   });
 
+  // 3. Database fetch (Same as before)
   const [fabrics, colors] = await Promise.all([
-    fabricIds.size > 0
-      ? Fabric.findAll({
-          where: { id: Array.from(fabricIds) },
-          attributes: ["id", "name"],
-        })
-      : [],
-    colorIds.size > 0
-      ? Color.findAll({
-          where: { id: Array.from(colorIds) },
-          attributes: ["id", "name"],
-        })
-      : [],
+    fabricIds.size > 0 ? Fabric.findAll({ where: { id: Array.from(fabricIds) }, attributes: ["id", "name"] }) : [],
+    colorIds.size > 0 ? Color.findAll({ where: { id: Array.from(colorIds) }, attributes: ["id", "name"] }) : [],
   ]);
 
-  const fabricMap = Object.fromEntries(
-    fabrics.map((f) => [f.id.toString(), f.name]),
-  );
-  const colorMap = Object.fromEntries(
-    colors.map((c) => [c.id.toString(), c.name]),
-  );
+  const fabricMap = Object.fromEntries(fabrics.map((f) => [f.id.toString(), f.name]));
+  const colorMap = Object.fromEntries(colors.map((c) => [c.id.toString(), c.name]));
 
-  users.forEach((user) => {
-    if (user.babies) {
-      user.babies = user.babies.map((baby) => {
-        if (
-          baby.baby_profile_image &&
-          !baby.baby_profile_image.startsWith("http")
-        ) {
-          baby.baby_profile_image = `${process.env.BACKEND_URL}/baby-image/${baby.baby_profile_image}`;
-        }
-
-        const fIds = parseIds(baby.fabric_preferences);
-        baby.fabric_preferences = fIds.map(
-          (id) => fabricMap[id.toString()] || id,
-        );
-
-        const cIds = parseIds(baby.preferred_colors);
-        baby.preferred_colors = cIds.map((id) => colorMap[id.toString()] || id);
-
-        return baby;
-      });
+  // 4. Data Map karein
+  babiesToProcess.forEach((baby) => {
+    // Image path fix
+    if (baby.baby_profile_image && !baby.baby_profile_image.startsWith("http")) {
+      baby.baby_profile_image = `${process.env.BACKEND_URL}/baby-image/${baby.baby_profile_image}`;
     }
+
+    // Fabric mapping
+    const fIds = parseIds(baby.fabric_preferences);
+    baby.fabric_preferences = fIds.map((id) => fabricMap[id.toString()] || id);
+
+    // Color mapping
+    const cIds = parseIds(baby.preferred_colors);
+    baby.preferred_colors = cIds.map((id) => colorMap[id.toString()] || id);
   });
 
-  return isArray ? users : users[0];
+  return isArray ? rawData : rawData[0];
 };
+
+
+
+
+
+
 
 const adminLogin = async (req, res, next) => {
   try {
@@ -1259,7 +1334,6 @@ const updateBanner = async (req, res, next) => {
     next(error);
   }
 };
-
 
 const allBanners = async (req, res, next) => {
   try {

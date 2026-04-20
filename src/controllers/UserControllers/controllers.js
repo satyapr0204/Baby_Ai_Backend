@@ -21,6 +21,8 @@ const { getCalculatedProducts } = require("../../utils/PriceHelper");
 const Color = require("../../modals/ProductModal/color");
 const Size = require("../../modals/ProductModal/size");
 const { processBabyData } = require("../AdminControllers/controllers");
+const Gender = require("../../modals/ProductModal/gender");
+const Brand = require("../../modals/ProductModal/brand");
 
 const genrateOtpAndToken = async (input, name, channel) => {
   const otp = crypto.randomInt(10000, 99999).toString();
@@ -31,6 +33,14 @@ const genrateOtpAndToken = async (input, name, channel) => {
     { expiresIn: "1m" },
   );
   return { otp, expiryToken };
+};
+
+const ensureHttps = (data) => {
+  if (!data) return data;
+  if (Array.isArray(data)) {
+    return data.map((url) => url.replace(/^http:\/\//i, "https://"));
+  }
+  return data.replace(/^http:\/\//i, "https://");
 };
 
 const sendOtpForLogin = async (req, res, next) => {
@@ -607,6 +617,7 @@ const homeData = async (req, res, next) => {
       formattedBabyData,
       allBanners,
       categoryShop,
+      tryOn: [],
     });
   } catch (error) {
     next(error);
@@ -650,10 +661,15 @@ const allWishlistData = async (req, res, next) => {
       }),
     );
 
+    const securedProducts = productsWithPrices.map((product) => ({
+      ...product,
+      product_images: ensureHttps(product.product_images),
+    }));
+
     const formattedRows = wishlistEntries.rows.map((item, index) => {
       return {
         wishlist_added_at: item.createdAt,
-        ...productsWithPrices[index],
+        ...securedProducts[index],
       };
     });
 
@@ -1013,9 +1029,15 @@ const productCategoryWiseData = async (req, res, next) => {
       category_id,
       user_id: user_id,
     });
+
+    const securedProducts = products.map((product) => ({
+      ...product,
+      product_images: ensureHttps(product.product_images),
+    }));
+
     sendResponse(res, "Products fetched successfully", 200, {
       count: products.length,
-      products: products,
+      products: securedProducts,
     });
   } catch (error) {
     next(error);
@@ -1091,15 +1113,21 @@ const fetchProductDetails = async (req, res, next) => {
     //   sale_price: finalSalePrice.toFixed(2),
     //   applied_discount: discountPct,
     // };
-
+    const babyProfile = await BabyProfile.findAll({
+      where: {
+        user_id,
+      },
+    });
+    const babies = await processBabyData(babyProfile);
     const productDetails = await getCalculatedProducts({
       product_id: id,
       user_id: user_id,
     });
-
+    productDetails.product_images = ensureHttps(productDetails.product_images);
     sendResponse(res, "Product detail fetched successfully", 200, {
       // productDetails: responseData,
       productDetails: productDetails,
+      babies,
     });
   } catch (error) {
     next(error);
@@ -1593,20 +1621,22 @@ const fetchAllCartItems = async (req, res, next) => {
       user_id,
       product_id: productIds,
     });
+    const securedProducts = productDetailsList.map((product) => ({
+      ...product,
+      product_images: ensureHttps(product.product_images),
+    }));
 
     const productMap = new Map(
-      (Array.isArray(productDetailsList)
-        ? productDetailsList
-        : [productDetailsList]
+      (Array.isArray(securedProducts)
+        ? securedProducts
+        : [securedProducts]
       ).map((p) => [p.id.toString(), p]),
     );
 
     const cartItemsWithDetails = cartItems.map((item) => {
       const plainItem = item.get({ plain: true });
       const details = productMap.get(plainItem.product_id.toString()) || null;
-
       const finalSalePrice = details ? parseFloat(details.sale_price) : 0;
-
       return {
         ...plainItem,
         product: details,
@@ -1624,6 +1654,47 @@ const fetchAllCartItems = async (req, res, next) => {
   }
 };
 
+const allFilterData = async (req, res, next) => {
+  try {
+    const [brands, colors, genders] = await Promise.all([
+      Brand.findAll(),
+      Color.findAll(),
+      Gender.findAll(),
+    ]);
+    const priceOptions = [
+      { id: 1, label: "$0 - $99", min_price: 0, max_price: 99 },
+      { id: 2, label: "$100 - $199", min_price: 100, max_price: 199 },
+      { id: 3, label: "$200 - $299", min_price: 200, max_price: 299 },
+      { id: 4, label: "$300 and above", min_price: 300, max_price: null },
+    ];
+    const filters = [
+      {
+        filter_key: "price",
+        filter_name: "Price",
+        options: priceOptions,
+      },
+      {
+        filter_key: "brand",
+        filter_name: "Brand",
+        options: brands,
+      },
+      {
+        filter_key: "gender",
+        filter_name: "Gender",
+        options: genders,
+      },
+      {
+        filter_key: "color",
+        filter_name: "Color",
+        options: colors,
+      },
+    ];
+    sendResponse(res, "Filters fetched successfully", 200, { filters });
+  } catch (error) {
+    console.error("Filter Fetch Error:", error);
+    next(error);
+  }
+};
 module.exports = {
   sendOtpForLogin,
   verifyOtp,
@@ -1654,4 +1725,5 @@ module.exports = {
   updatedQuantityInCart,
   removeFromCart,
   fetchAllCartItems,
+  allFilterData,
 };

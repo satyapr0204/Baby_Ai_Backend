@@ -29,6 +29,7 @@ const {
   fabricList,
   colorsPreferenceList,
   getAllSizes,
+  allFilterData,
 } = require("../../controllers/UserControllers/controllers");
 const { authenticateToken } = require("../../middleware/authMiddleware");
 const validateBody = require("../../middleware/validator");
@@ -233,6 +234,8 @@ userRouter.post(
 );
 
 userRouter.get("/fetch-cart-items", authenticateToken, fetchAllCartItems);
+
+userRouter.get('/filter-data',authenticateToken,allFilterData)
 
 // For static pages
 userRouter.get("/faqs", authenticateToken, getFaqs);

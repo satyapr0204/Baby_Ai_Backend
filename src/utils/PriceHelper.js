@@ -104,6 +104,28 @@ const { Wishlist } = require("../modals/userWishlistModal");
 const Product = require("../modals/ProductModal/product");
 const Category = require("../modals/ProductModal/category");
 const Retailer = require("../modals/ProductModal/retailer");
+const Fabric = require("../modals/ProductModal/fabric");
+const Color = require("../modals/ProductModal/color");
+const Size = require("../modals/ProductModal/size");
+const Brand = require("../modals/ProductModal/brand");
+
+const formatValue = (obj) => {
+  if (!obj || !obj.name) return obj;
+  if (Array.isArray(obj.name)) return obj;
+  let formattedNames;
+  if (obj.name.includes("/")) {
+    formattedNames = obj.name
+      .split("/")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  } else {
+    formattedNames = [obj.name.trim()];
+  }
+  return {
+    ...obj,
+    name: formattedNames,
+  };
+};
 
 const getCalculatedProducts = async ({
   category_id,
@@ -119,6 +141,37 @@ const getCalculatedProducts = async ({
         : product_id;
     }
     if (category_id) productWhere.category_id = category_id;
+
+    // const products = await Product.findAll({
+    //   where: productWhere,
+    //   include: [
+    //     {
+    //       model: Category,
+    //       as: "categories",
+    //       where: { is_active: 1 },
+    //       include: [
+    //         {
+    //           model: Retailer,
+    //           as: "retailers",
+    //           where: { is_active: 1 },
+    //           required: false,
+    //         },
+    //       ],
+    //     },
+    //     {
+    //       model: Retailer,
+    //       as: "retailers",
+    //       where: { is_active: 1 },
+    //       required: false,
+    //     },
+    //     {
+    //       model: Wishlist,
+    //       as: "wishlists",
+    //       where: user_id ? { user_id } : {},
+    //       required: false,
+    //     },
+    //   ],
+    // });
 
     const products = await Product.findAll({
       where: productWhere,
@@ -136,7 +189,6 @@ const getCalculatedProducts = async ({
             },
           ],
         },
-
         {
           model: Retailer,
           as: "retailers",
@@ -147,6 +199,26 @@ const getCalculatedProducts = async ({
           model: Wishlist,
           as: "wishlists",
           where: user_id ? { user_id } : {},
+          required: false,
+        },
+        {
+          model: Fabric,
+          as: "fabric",
+          required: false,
+        },
+        {
+          model: Color,
+          as: "color",
+          required: false,
+        },
+        {
+          model: Size,
+          as: "size",
+          required: false,
+        },
+        {
+          model: Brand,
+          as: "brand",
           required: false,
         },
       ],
@@ -201,6 +273,11 @@ const getCalculatedProducts = async ({
       }
       return {
         ...p,
+        fabric: formatValue(p.fabric),
+        color: formatValue(p.color),
+        size: formatValue(p.size),
+        brand: formatValue(p.brand),
+        // description: p.description ? p.description.replace(/<[^>]&*>/g, '') : "",
         discount_applied: `${discountPct}%`,
         category_name: category?.name || "N/A",
         sale_price: finalPrice > 0 ? finalPrice.toFixed(2) : cost.toFixed(2),
