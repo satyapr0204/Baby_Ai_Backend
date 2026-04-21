@@ -14,7 +14,6 @@ const sendOtpOnEmail = async (mailOptions, retries = 3) => {
         },
     });
 
-
     const sendEmail = async () => {
         try {
             await transporter.sendMail(mailOptions);
@@ -30,7 +29,6 @@ const sendOtpOnEmail = async (mailOptions, retries = 3) => {
             }
         }
     };
-
     await sendEmail(mailOptions, retries);
 };
 

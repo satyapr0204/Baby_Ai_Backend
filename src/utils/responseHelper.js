@@ -10,11 +10,10 @@ const { sendResponse } = require('./coustomResponse')
  * @param {Number} statusCode - HTTP status code (default 200)
  */
 export function sendListResponse(res, message, data = [], statusCode = 200) {
-  // Ensure we have an array
   const formattedData = Array.isArray(data)
     ? data.map((item, index) => ({
-      ...(typeof item.toJSON === "function" ? item.toJSON() : item), // convert Sequelize instance
-      serial_no: index + 1, // Add serial number
+      ...(typeof item.toJSON === "function" ? item.toJSON() : item), 
+      serial_no: index + 1,
     }))
     : [];
 

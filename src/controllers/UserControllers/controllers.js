@@ -357,7 +357,6 @@ const updateBabyProfileWithStep = async (req, res, next) => {
             ? baby_profile_image
             : babyDataWithUser.baby_profile_image,
         });
-
         return sendResponse(
           res,
           "Baby profile has been updated succesfully",

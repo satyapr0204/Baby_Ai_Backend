@@ -103,8 +103,6 @@ const Color = require("../../modals/ProductModal/color");
 //   return isArray ? users : users[0];
 // };
 
-
-
 const processBabyData = async (data) => {
   if (!data) return data;
 
@@ -112,18 +110,21 @@ const processBabyData = async (data) => {
   let rawData = isArray ? data : [data];
 
   // Convert to plain objects
-  rawData = rawData.map((d) => (typeof d.toJSON === "function" ? d.toJSON() : d));
+  rawData = rawData.map((d) =>
+    typeof d.toJSON === "function" ? d.toJSON() : d,
+  );
 
   // 1. Pata lagao ki ye User hai ya Baby
   // Agar pehle element ke paas 'fabric_preferences' hai, matlab ye Baby array hai
-  const isDirectBabyArray = rawData.length > 0 && ('fabric_preferences' in rawData[0]);
+  const isDirectBabyArray =
+    rawData.length > 0 && "fabric_preferences" in rawData[0];
 
   let babiesToProcess = [];
   if (isDirectBabyArray) {
     babiesToProcess = rawData;
   } else {
     // Purana logic: User ke andar se babies nikaalo
-    rawData.forEach(user => {
+    rawData.forEach((user) => {
       if (user.babies) babiesToProcess.push(...user.babies);
     });
   }
@@ -135,28 +136,51 @@ const processBabyData = async (data) => {
     try {
       const p = typeof val === "string" ? JSON.parse(val || "[]") : val;
       return Array.isArray(p) ? p : [];
-    } catch { return []; }
+    } catch {
+      return [];
+    }
   };
 
   // 2. IDs collect karein
   babiesToProcess.forEach((baby) => {
-    parseIds(baby.fabric_preferences).forEach((id) => fabricIds.add(id.toString()));
-    parseIds(baby.preferred_colors).forEach((id) => colorIds.add(id.toString()));
+    parseIds(baby.fabric_preferences).forEach((id) =>
+      fabricIds.add(id.toString()),
+    );
+    parseIds(baby.preferred_colors).forEach((id) =>
+      colorIds.add(id.toString()),
+    );
   });
 
   // 3. Database fetch (Same as before)
   const [fabrics, colors] = await Promise.all([
-    fabricIds.size > 0 ? Fabric.findAll({ where: { id: Array.from(fabricIds) }, attributes: ["id", "name"] }) : [],
-    colorIds.size > 0 ? Color.findAll({ where: { id: Array.from(colorIds) }, attributes: ["id", "name"] }) : [],
+    fabricIds.size > 0
+      ? Fabric.findAll({
+          where: { id: Array.from(fabricIds) },
+          attributes: ["id", "name"],
+        })
+      : [],
+    colorIds.size > 0
+      ? Color.findAll({
+          where: { id: Array.from(colorIds) },
+          attributes: ["id", "name"],
+        })
+      : [],
   ]);
 
-  const fabricMap = Object.fromEntries(fabrics.map((f) => [f.id.toString(), f.name]));
-  const colorMap = Object.fromEntries(colors.map((c) => [c.id.toString(), c.name]));
+  const fabricMap = Object.fromEntries(
+    fabrics.map((f) => [f.id.toString(), f.name]),
+  );
+  const colorMap = Object.fromEntries(
+    colors.map((c) => [c.id.toString(), c.name]),
+  );
 
   // 4. Data Map karein
   babiesToProcess.forEach((baby) => {
     // Image path fix
-    if (baby.baby_profile_image && !baby.baby_profile_image.startsWith("http")) {
+    if (
+      baby.baby_profile_image &&
+      !baby.baby_profile_image.startsWith("http")
+    ) {
       baby.baby_profile_image = `${process.env.BACKEND_URL}/baby-image/${baby.baby_profile_image}`;
     }
 
@@ -171,12 +195,6 @@ const processBabyData = async (data) => {
 
   return isArray ? rawData : rawData[0];
 };
-
-
-
-
-
-
 
 const adminLogin = async (req, res, next) => {
   try {
@@ -283,10 +301,9 @@ const globalDelete = async (req, res, next) => {
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ");
 
-    // const imageFieldsMap = {
-    //   banner: "banner_url",
-    //   static_page: "thumbnail",
-    // };
+    const imageFieldsMap = {
+      banner: "banner_url",
+    };
     const TargetModel = modelMap[type];
     if (!TargetModel) throw new CoustomError(`Invalid type: '${type}'`, 400);
     const record = await TargetModel.findOne({
@@ -299,19 +316,19 @@ const globalDelete = async (req, res, next) => {
       throw new CoustomError(`${formattedType} not found`, 404);
     }
 
-    // if (imageFieldsMap[type]) {
-    //   const columnName = imageFieldsMap[type];
-    //   const imagePath = record[columnName];
-
-    //   if (imagePath) {
-    //     const fullPath = path.join(__dirname, "../public", imagePath);
-
-    //     if (fs.existsSync(fullPath)) {
-    //       fs.unlinkSync(fullPath);
-    //     }
-    //   }
-    // }
-
+    if (imageFieldsMap[type]) {
+      const columnName = imageFieldsMap[type];
+      const imagePath = record[columnName];
+      if (imagePath) {
+        const fullPath = path.join(__dirname, "../../Banners", imagePath);
+        try {
+          await fs.access(fullPath);
+          await fs.unlink(fullPath);
+        } catch (err) {
+          console.log("File nahi mili ya delete nahi ho saki", err.message);
+        }
+      }
+    }
     await record.destroy();
     sendResponse(res, `${formattedType} deleted successfully!`, 200);
   } catch (error) {
@@ -974,6 +991,8 @@ const allCategories = async (req, res, next) => {
         {
           model: Retailer,
           as: "retailers",
+          where: { is_active: 1 },
+          required: true,
           attributes: [
             "id",
             "name",
@@ -1125,10 +1144,8 @@ const addBanner = async (req, res, next) => {
     } = req.body;
     console.log("req.body:", req.body);
     let banner_url;
-    if (req.file) {
+    if (req.file || img_url) {
       banner_url = req.file.filename;
-    } else if (img_url) {
-      banner_url = img_url;
     } else {
       banner_url = null;
     }
@@ -1151,10 +1168,8 @@ const addBanner = async (req, res, next) => {
           400,
         );
     }
-
     const startDate = formatDate(start_offer_date);
     const endDate = formatDate(end_offer_date);
-
     const newBanner = await Banner.create({
       location,
       banner_url,
