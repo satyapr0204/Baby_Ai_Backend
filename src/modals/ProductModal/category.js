@@ -1,7 +1,6 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../../../dbConfig");
 
-
 const Category = sequelize.define(
   "Category",
   {
@@ -32,6 +31,10 @@ const Category = sequelize.define(
       type: DataTypes.DECIMAL(10, 2),
       defaultValue: 0.0,
     },
+    is_retailor_price_active: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
   },
   {
     tableName: "categories",
@@ -41,10 +44,9 @@ const Category = sequelize.define(
 
 module.exports = Category;
 
-
-const Retailer = require("./retailer"); 
-Category.belongsToMany(Retailer, { 
-    through: "RetailerCategories", 
-    foreignKey: "category_id",
-    as: "retailers" 
+const Retailer = require("./retailer");
+Category.belongsToMany(Retailer, {
+  through: "RetailerCategories",
+  foreignKey: "category_id",
+  as: "retailers",
 });

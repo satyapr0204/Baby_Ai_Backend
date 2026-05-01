@@ -425,56 +425,45 @@ const fetchAllFlashMessages = async (req, res, next) => {
       throw new CoustomError("No flash messages found", 404);
     }
 
-    // const settingsMap = {};
-    // minMaxSettings.forEach((s) => {
-    //   settingsMap[s.type] = { min: s.min, max: s.max };
-    // });
-
-    // console.log("settingsMap", settingsMap);
-
-    // const processedMessages = flashMessages.map((msgObj) => {
-    //   let messageText = msgObj.message;
-
-    //   messageText = messageText.replace(
-    //     /\{(\w+)\+\}/g,
-    //     (match, type, offset, fullString) => {
-    //       const config = settingsMap[type];
-
-    //       if (config) {
-    //         const min = Number(config.min);
-    //         const max = Number(config.max);
-
-    //         const randomNum = Math.floor(Math.random() * (max - min + 1)) + min;
-    //         console.log("Min:", min, "Max:", max, "Generated:", randomNum);
-    //         let replacement = randomNum.toString();
-
-    //         if (offset > 0 && fullString[offset - 1] !== " ") {
-    //           replacement = " " + replacement;
-    //         }
-
-    //         const nextCharIndex = offset + match.length;
-    //         if (
-    //           nextCharIndex < fullString.length &&
-    //           fullString[nextCharIndex] !== " "
-    //         ) {
-    //           replacement = replacement + " ";
-    //         }
-
-    //         return replacement;
-    //       }
-
-    //       return match;
-    //     },
-    //   );
-
-    //   return {
-    //     ...(msgObj.toJSON ? msgObj.toJSON() : msgObj),
-    //     message: messageText.replace(/\s+/g, " ").trim(),
-    //   };
-    // });
-
     sendResponse(res, "Flash messages retrieved successfully!", 200, {
       flashMessages: flashMessages,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const previewMessage = async (req, res, next) => {
+  try {
+    const message_id = req.body.id;
+    if (!message_id) throw new CoustomError("Message id is required!", 400);
+    const message = await FlashMessage.findOne({
+      where: { id: message_id },
+    });
+    if (!message) throw new CoustomError("No message found", 404);
+    const settingsMap = {};
+    const minMaxSettings = await MinAndMax.findAll();
+    minMaxSettings.forEach((s) => {
+      settingsMap[s.type] = { min: s.min, max: s.max };
+    });
+    let messageText = message.message;
+    const processedText = messageText.replace(/\{(\w+)\+\}/g, (match, type) => {
+      const config = settingsMap[type];
+      if (config) {
+        const min = Number(config.min);
+        const max = Number(config.max);
+        const randomNum = Math.floor(Math.random() * (max - min + 1)) + min;
+        return ` ${randomNum} `;
+      }
+      return match;
+    });
+    const finalMessage = {
+      ...message.toJSON(),
+      message: processedText.replace(/\s+/g, " ").trim(),
+    };
+    return res.status(200).json({
+      status: true,
+      data: finalMessage,
     });
   } catch (error) {
     next(error);
@@ -1011,45 +1000,138 @@ const allCategories = async (req, res, next) => {
       throw new CoustomError("No categories found", 404);
     }
 
+    // const updatedCategories = categories.map((cat) => {
+    //   const categoryData = cat.toJSON();
+    //   const categoryId = categoryData.id;
+    //   categoryData.retailer_addon = "0";
+    //   categoryData.retailer_discount = "0";
+    //   categoryData.retailer_margin = "0";
+    //   if (
+    //     parseFloat(categoryData.addon_percentage) === 0 &&
+    //     parseFloat(categoryData.discount_percentage) === 0
+    //   ) {
+    //     if (categoryData.retailers && categoryData.retailers.length > 0) {
+    //       let retailerSelected = categoryData.retailers[0].selected_categories;
+
+    //       if (typeof retailerSelected === "string") {
+    //         try {
+    //           retailerSelected = JSON.parse(retailerSelected);
+    //         } catch (e) {
+    //           retailerSelected = [];
+    //         }
+    //       }
+    //       const validRetailer =
+    //         Array.isArray(retailerSelected) &&
+    //         retailerSelected.includes(categoryId);
+    //       if (validRetailer) {
+
+    //         categoryData.retailer_addon = `${parseFloat(categoryData.retailers[0].addon_percentage)}`;
+    //         categoryData.retailer_discount = `${parseFloat(categoryData.retailers[0].discount)}`;
+    //         const { status, marginPct, marginAmt } = calculateSafeMargin(
+    //           categoryData.total_cost,
+    //           categoryData.retailer_addon,
+    //           categoryData.retailer_discount,
+    //         );
+    //         categoryData.retailer_margin = `${marginPct}` || 0;
+
+    //       }
+    //     }
+    //   } else {
+    //     categoryData.retailer_addon = "0";
+    //     categoryData.retailer_discount = "0";
+    //     categoryData.retailer_margin = "0";
+    //   }
+    //   delete categoryData.retailers;
+    //   return categoryData;
+    // });
+
+    // const updatedCategories = categories.map((cat) => {
+    //   const categoryData = cat.toJSON();
+    //   const categoryId = categoryData.id;
+    //   let finalAddon = categoryData.addon_percentage;
+    //   let finalDiscount = categoryData.discount_percentage;
+    //   let finalMargin = categoryData.total_margin;
+
+    //   if (categoryData.retailers && categoryData.retailers.length > 0) {
+    //     let retailerSelected = categoryData.retailers[0].selected_categories;
+
+    //     if (typeof retailerSelected === "string") {
+    //       try {
+    //         retailerSelected = JSON.parse(retailerSelected);
+    //       } catch (e) {
+    //         retailerSelected = [];
+    //       }
+    //     }
+
+    //     const isRetailerValid =
+    //       Array.isArray(retailerSelected) &&
+    //       retailerSelected.includes(categoryId);
+
+    //     if (
+    //       isRetailerValid &&
+    //       parseInt(categoryData.is_retailor_price_active) === 1
+    //     ) {
+    //       finalAddon = categoryData.retailers[0].addon_percentage;
+    //       finalDiscount = categoryData.retailers[0].discount;
+
+    //       const { status, marginPct, marginAmt } = calculateSafeMargin(
+    //         categoryData.total_cost,
+    //         finalAddon,
+    //         finalDiscount,
+    //       );
+    //       finalMargin = marginPct;
+    //     }
+    //   }
+    //   categoryData.retailer_addon = `${parseFloat(finalAddon)}`;
+    //   categoryData.retailer_discount = `${parseFloat(finalDiscount)}`;
+    //   categoryData.retailer_margin = `${finalMargin}`;
+
+    //   delete categoryData.retailers;
+    //   return categoryData;
+    // });
+
     const updatedCategories = categories.map((cat) => {
       const categoryData = cat.toJSON();
       const categoryId = categoryData.id;
-      categoryData.retailer_addon = "0";
-      categoryData.retailer_discount = "0";
-      categoryData.retailer_margin = "0";
-      if (
-        parseFloat(categoryData.addon_percentage) === 0 &&
-        parseFloat(categoryData.discount_percentage) === 0
-      ) {
-        if (categoryData.retailers && categoryData.retailers.length > 0) {
-          let retailerSelected = categoryData.retailers[0].selected_categories;
 
-          if (typeof retailerSelected === "string") {
-            try {
-              retailerSelected = JSON.parse(retailerSelected);
-            } catch (e) {
-              retailerSelected = [];
-            }
-          }
-          const validRetailer =
-            Array.isArray(retailerSelected) &&
-            retailerSelected.includes(categoryId);
-          if (validRetailer) {
-            categoryData.retailer_addon = `${parseFloat(categoryData.retailers[0].addon_percentage)}`;
-            categoryData.retailer_discount = `${parseFloat(categoryData.retailers[0].discount)}`;
-            const { status, marginPct, marginAmt } = calculateSafeMargin(
-              categoryData.total_cost,
-              categoryData.retailer_addon,
-              categoryData.retailer_discount,
-            );
-            categoryData.retailer_margin = `${marginPct}` || 0;
+      // 1. Check karo retailer valid hai aur flag active hai
+      if (categoryData.retailers && categoryData.retailers.length > 0) {
+        let retailerSelected = categoryData.retailers[0].selected_categories;
+
+        // JSON parsing logic
+        if (typeof retailerSelected === "string") {
+          try {
+            retailerSelected = JSON.parse(retailerSelected);
+          } catch (e) {
+            retailerSelected = [];
           }
         }
-      } else {
-        categoryData.retailer_addon = "0";
-        categoryData.retailer_discount = "0";
-        categoryData.retailer_margin = "0";
+
+        const isRetailerValid =
+          Array.isArray(retailerSelected) &&
+          retailerSelected.includes(categoryId);
+
+        if (
+          isRetailerValid &&
+          parseInt(categoryData.is_retailor_price_active) === 1
+        ) {
+          // 2. Existing keys ko retailer ki values se update kar rahe hain
+          categoryData.addon_percentage = `${parseFloat(categoryData.retailers[0].addon_percentage)}`;
+          categoryData.discount_percentage = `${parseFloat(categoryData.retailers[0].discount)}`;
+
+          const { status, marginPct, marginAmt } = calculateSafeMargin(
+            categoryData.total_cost,
+            categoryData.addon_percentage,
+            categoryData.discount_percentage,
+          );
+
+          categoryData.total_margin = `${marginPct || 0}`;
+        }
+        // Note: Agar condition match nahi hui, toh jo database mein pehle se values hain
+        // (categoryData.addon_percentage etc.), wahi rahengi.
       }
+
+      // 3. Purani keys delete kardo aur extra retailer data hata do
       delete categoryData.retailers;
       return categoryData;
     });
@@ -1058,6 +1140,51 @@ const allCategories = async (req, res, next) => {
       categories: updatedCategories,
     });
   } catch (error) {
+    next(error);
+  }
+};
+const resetRetailorPrice = async (req, res, next) => {
+  try {
+    const { id } = req.body;
+    const retailer = await Retailer.findByPk(id);
+
+    if (!retailer) {
+      return res.status(404).json({
+        status: false,
+        message: "Retailer not found",
+      });
+    }
+    let selectedIds = retailer.selected_categories;
+
+    if (typeof selectedIds === "string") {
+      try {
+        selectedIds = JSON.parse(selectedIds);
+      } catch (e) {
+        selectedIds = [];
+      }
+    }
+    if (!Array.isArray(selectedIds) || selectedIds.length === 0) {
+      return res.status(400).json({
+        status: false,
+        message: "No categories selected for this retailer to update",
+      });
+    }
+    const [updatedCount] = await Category.update(
+      { is_retailor_price_active: 1 },
+      {
+        where: {
+          id: selectedIds,
+        },
+      },
+    );
+
+    return res.status(200).json({
+      status: true,
+      message: `Successfully activated retailer price for ${updatedCount} selected categories.`,
+      updatedCount,
+    });
+  } catch (error) {
+    console.error("Error in resetRetailorPrice:", error);
     next(error);
   }
 };
@@ -1119,6 +1246,7 @@ const updateCategory = async (req, res, next) => {
       discount_percentage: discount,
       total_margin: marginPct,
       addon_percentage: add_on_percentage,
+      is_retailor_price_active: 0,
     });
 
     sendResponse(res, "Category updated successfully!", 200, {
@@ -1356,7 +1484,6 @@ const allBanners = async (req, res, next) => {
     if (banners.length === 0) {
       throw new CoustomError("No banners found", 404);
     }
-
     const allBanners = banners.map((banner) => {
       const bannerJson = banner.toJSON();
       if (bannerJson.banner_url) {
@@ -1739,6 +1866,7 @@ module.exports = {
   globleFlashEnableStatus,
   addAlertMessage,
   fetchAllFlashMessages,
+  previewMessage,
   addMinMaxTimeCount,
   updateMinMaxTimeCount,
   getTimeCountConfig,
@@ -1754,6 +1882,7 @@ module.exports = {
   allStaticPages,
   userDetails,
   allCategories,
+  resetRetailorPrice,
   categoryDetails,
   updateCategory,
   addBanner,

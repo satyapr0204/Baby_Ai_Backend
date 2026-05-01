@@ -13,7 +13,7 @@
   "dependencies": {
     "accepts": "^2.0.0",
     "asynckit": "^0.4.0",
-    "axios": "^1.13.6",
+    "axios": "^1.15.2",
     "bcrypt": "^6.0.0",
     "bytes": "^3.1.2",
     "call-bound": "^1.0.4",

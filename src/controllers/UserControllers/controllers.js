@@ -23,6 +23,7 @@ const Size = require("../../modals/ProductModal/size");
 const { processBabyData } = require("../AdminControllers/controllers");
 const Gender = require("../../modals/ProductModal/gender");
 const Brand = require("../../modals/ProductModal/brand");
+const axios = require("axios");
 
 const genrateOtpAndToken = async (input, name, channel) => {
   const otp = crypto.randomInt(10000, 99999).toString();
@@ -35,13 +36,52 @@ const genrateOtpAndToken = async (input, name, channel) => {
   return { otp, expiryToken };
 };
 
+const proxyImage = async (req, res) => {
+  try {
+    const { url } = req.query;
+    console.log("url", url);
+    if (!url) return res.status(400).send("URL missing");
+
+    const response = await axios({
+      method: "get",
+      url: url,
+      headers: {
+        "X-App-ID": "BabyAiApp-Frontend-v1",
+      },
+    });
+    console.log("response", response);
+    res.setHeader(
+      "Content-Type",
+      response.headers["content-type"] || "image/jpeg",
+    );
+    response.data.pipe(res);
+  } catch (error) {
+    console.log("error", error);
+    console.error("Proxy Error:", error.message);
+    res.status(500).send("Image fetch failed");
+  }
+};
+
 const ensureHttps = (data) => {
   if (!data) return data;
+  const proxyBaseUrl =
+    "https://bridgeable-erinn-overluxuriously.ngrok-free.dev/proxy-image?url=";
+  const getProxyUrl = (originalUrl) => {
+    return `${proxyBaseUrl}${encodeURIComponent(originalUrl)}`;
+  };
   if (Array.isArray(data)) {
-    return data.map((url) => url.replace(/^http:\/\//i, "https://"));
+    return data.map((url) => getProxyUrl(url));
   }
-  return data.replace(/^http:\/\//i, "https://");
+  return getProxyUrl(data);
 };
+
+// const ensureHttps = (data) => {
+//   if (!data) return data;
+//   if (Array.isArray(data)) {
+//     return data.map((url) => url.replace(/^http:\/\//i, "http://"));
+//   }
+//   return data.replace(/^http:\/\//i, "http://");
+// };
 
 const sendOtpForLogin = async (req, res, next) => {
   try {
@@ -310,11 +350,14 @@ const updateBabyProfileWithStep = async (req, res, next) => {
       fabric_preferences,
       preferred_colors,
     } = req.body;
+
     let baby_profile_image;
+    console.log("req.body", req.body);
     if (req.file) {
       baby_profile_image = req.file.filename;
-      console.log("baby_profile_image", baby_profile_image);
+      console.log("baby_profile_image in side if", baby_profile_image);
     } else {
+      console.log("req.file in side else", req.file);
       baby_profile_image = null;
     }
     let newBaby;
@@ -583,6 +626,7 @@ const homeData = async (req, res, next) => {
       where: {
         user_id: id,
       },
+      attributes: ["id", "baby_profile_image"], // Agar sirf images chahiye
       raw: true,
     });
 
@@ -603,7 +647,49 @@ const homeData = async (req, res, next) => {
       },
     });
 
-    const categoryShop = await Category.findAll();
+    // const categoryShop = await Category.findAll();
+    const categoryShop = await Category.findAll({
+      where: {
+        is_active: 1,
+      },
+      include: [
+        {
+          model: Product,
+          as: "categories",
+          attributes: ["product_images"],
+          limit: 1,
+          order: [["id", "ASC"]],
+        },
+      ],
+    });
+    const finalResponse = categoryShop.map((cat) => {
+      const item = cat.toJSON();
+      let firstImage = null;
+      if (item.categories && item.categories.length > 0) {
+        const productImages = item.categories[0].product_images;
+
+        const imagesArray =
+          typeof productImages === "string"
+            ? JSON.parse(productImages)
+            : productImages;
+
+        firstImage =
+          imagesArray && imagesArray.length > 0 ? imagesArray[0] : null;
+      }
+      return {
+        id: item.id,
+        name: item.name,
+        category_image: firstImage,
+        is_active: item.is_active,
+        price_range: item.price_range,
+        discount_percentage: item.discount_percentage,
+        total_margin: item.total_margin,
+        addon_percentage: item.addon_percentage,
+        is_retailor_price_active: item.is_retailor_price_active,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      };
+    });
 
     const allBanners = bannersData.map((banner) => {
       const bannerJson = banner.toJSON();
@@ -615,7 +701,7 @@ const homeData = async (req, res, next) => {
     sendResponse(res, "data fetched", 200, {
       formattedBabyData,
       allBanners,
-      categoryShop,
+      categoryShop: finalResponse,
       tryOn: [],
     });
   } catch (error) {
@@ -679,6 +765,7 @@ const allWishlistData = async (req, res, next) => {
 
     const formattedResponse = getPagingData(finalData, page, limit);
 
+    console.log("formattedResponse", formattedResponse);
     sendResponse(
       res,
       "Wishlist fetched successfully with updated prices",
@@ -707,14 +794,19 @@ const addToWishlist = async (req, res, next) => {
         product_id: product_id,
       },
     });
-    if (isInWishlist)
-      throw new CoustomError("Already added in your wishlist", 400);
-
-    await Wishlist.create({
-      user_id: id,
-      product_id: product_id,
-    });
-    sendResponse(res, "Added to wishlist", 200);
+    if (isInWishlist) {
+      await isInWishlist.destroy();
+    } else {
+      await Wishlist.create({
+        user_id: id,
+        product_id: product_id,
+      });
+    }
+    sendResponse(
+      res,
+      `${isInWishlist ? "Deleted from" : "Added to"} wishlist`,
+      200,
+    );
   } catch (error) {
     next(error);
   }
@@ -743,15 +835,60 @@ const deleteFromWishlist = async (req, res, next) => {
 
 const babyCategoryData = async (req, res, next) => {
   try {
-    const categories = await Category.findAll({
+    // const categories = await Category.findAll({
+    //   where: {
+    //     is_active: 1,
+    //   },
+    // });
+
+    const categoryShop = await Category.findAll({
       where: {
         is_active: 1,
       },
+      include: [
+        {
+          model: Product,
+          as: "categories",
+          attributes: ["product_images"],
+          limit: 1,
+          order: [["id", "ASC"]],
+        },
+      ],
     });
-    if (!categories) throw new CoustomError("Category not found", 404);
+
+    const finalResponse = categoryShop.map((cat) => {
+      const item = cat.toJSON();
+      let firstImage = null;
+      if (item.categories && item.categories.length > 0) {
+        const productImages = item.categories[0].product_images;
+        const imagesArray =
+          typeof productImages === "string"
+            ? JSON.parse(productImages)
+            : productImages;
+
+        firstImage =
+          imagesArray && imagesArray.length > 0 ? imagesArray[0] : null;
+      }
+
+      return {
+        id: item.id,
+        name: item.name,
+        category_image: firstImage,
+        is_active: item.is_active,
+        price_range: item.price_range,
+        discount_percentage: item.discount_percentage,
+        total_margin: item.total_margin,
+        addon_percentage: item.addon_percentage,
+        is_retailor_price_active: item.is_retailor_price_active,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      };
+    });
+
+    if (!finalResponse) throw new CoustomError("Category not found", 404);
     sendResponse(res, "Baby category data fetched successfully", 200, {
-      categories,
-      count: categories.length,
+      categories: finalResponse,
+      count: finalResponse.length,
     });
   } catch (error) {
     next(error);
@@ -1031,7 +1168,6 @@ const productCategoryWiseData = async (req, res, next) => {
 
     const securedProducts = products.map((product) => ({
       ...product,
-      product_images: ensureHttps(product.product_images),
     }));
 
     sendResponse(res, "Products fetched successfully", 200, {
@@ -1122,7 +1258,7 @@ const fetchProductDetails = async (req, res, next) => {
       product_id: id,
       user_id: user_id,
     });
-    productDetails.product_images = ensureHttps(productDetails.product_images);
+    // productDetails.product_images = ensureHttps(productDetails.product_images);
     sendResponse(res, "Product detail fetched successfully", 200, {
       // productDetails: responseData,
       productDetails: productDetails,
@@ -1553,6 +1689,9 @@ const updatedQuantityInCart = async (req, res, next) => {
     let resData = {
       ...plainCartItem,
       total_price: parseFloat(plainCartItem.total_price).toFixed(2),
+      actual_total_price: parseFloat(plainCartItem.actual_total_price).toFixed(
+        2,
+      ),
     };
 
     return sendResponse(res, "Cart item quantity updated successfully", 200, {
@@ -1610,6 +1749,7 @@ const fetchAllCartItems = async (req, res, next) => {
     const { id: user_id } = req.user;
     const cartItems = await Cart.findAll({
       where: { user_id },
+      attributes: { exclude: ["createdAt", "updatedAt", "user_id", "category_name"] },
     });
 
     if (!cartItems.length) {
@@ -1622,7 +1762,7 @@ const fetchAllCartItems = async (req, res, next) => {
     });
     const securedProducts = productDetailsList.map((product) => ({
       ...product,
-      product_images: ensureHttps(product.product_images),
+      // product_images: ensureHttps(product.product_images),
     }));
 
     const productMap = new Map(
@@ -1636,16 +1776,19 @@ const fetchAllCartItems = async (req, res, next) => {
       const plainItem = item.get({ plain: true });
       const details = productMap.get(plainItem.product_id.toString()) || null;
       const finalSalePrice = details ? parseFloat(details.sale_price) : 0;
+      const finalActualPrice = details ? parseFloat(details.actual_price) : 0;
       return {
         ...plainItem,
-        product: details,
+        actual_total_price: (plainItem.quantity * finalActualPrice).toFixed(2),
         total_price: (plainItem.quantity * finalSalePrice).toFixed(2),
+        product: details,
         max_quantity: 10,
       };
     });
 
     sendResponse(res, "Cart items fetched successfully", 200, {
       cart_item: cartItemsWithDetails,
+      related_outfits: productDetailsList,
     });
   } catch (error) {
     console.error("Error in fetchAllCartItems:", error);
@@ -1725,4 +1868,5 @@ module.exports = {
   removeFromCart,
   fetchAllCartItems,
   allFilterData,
+  proxyImage,
 };

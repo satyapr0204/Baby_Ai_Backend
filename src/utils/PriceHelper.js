@@ -108,6 +108,7 @@ const Fabric = require("../modals/ProductModal/fabric");
 const Color = require("../modals/ProductModal/color");
 const Size = require("../modals/ProductModal/size");
 const Brand = require("../modals/ProductModal/brand");
+const Cart = require("../modals/cartModal");
 
 const formatValue = (obj) => {
   if (!obj || !obj.name) return obj;
@@ -134,7 +135,6 @@ const getCalculatedProducts = async ({
 }) => {
   try {
     let productWhere = { sale_price: { [Op.gt]: 0 } };
-    // if (product_id) productWhere.id = product_id;
     if (product_id) {
       productWhere.id = Array.isArray(product_id)
         ? { [Op.in]: product_id }
@@ -175,17 +175,20 @@ const getCalculatedProducts = async ({
 
     const products = await Product.findAll({
       where: productWhere,
+      attributes: { exclude: ["createdAt", "updatedAt"] },
       include: [
         {
           model: Category,
           as: "categories",
           where: { is_active: 1 },
+          attributes: { exclude: ["createdAt", "updatedAt"] },
           include: [
             {
               model: Retailer,
               as: "retailers",
               where: { is_active: 1 },
               required: false,
+              attributes: { exclude: ["createdAt", "updatedAt"] },
             },
           ],
         },
@@ -194,32 +197,45 @@ const getCalculatedProducts = async ({
           as: "retailers",
           where: { is_active: 1 },
           required: false,
+          attributes: { exclude: ["createdAt", "updatedAt"] },
         },
         {
           model: Wishlist,
           as: "wishlists",
           where: user_id ? { user_id } : {},
           required: false,
+          attributes: { exclude: ["createdAt", "updatedAt"] },
+        },
+        {
+          model: Cart,
+          as: "cart",
+          where: user_id ? { user_id } : {},
+          required: false,
+          attributes: { exclude: ["createdAt", "updatedAt"] },
         },
         {
           model: Fabric,
           as: "fabric",
           required: false,
+          attributes: { exclude: ["createdAt", "updatedAt"] },
         },
         {
           model: Color,
           as: "color",
           required: false,
+          attributes: { exclude: ["createdAt", "updatedAt"] },
         },
         {
           model: Size,
           as: "size",
           required: false,
+          attributes: { exclude: ["createdAt", "updatedAt"] },
         },
         {
           model: Brand,
           as: "brand",
           required: false,
+          attributes: { exclude: ["createdAt", "updatedAt"] },
         },
       ],
     });
@@ -284,9 +300,11 @@ const getCalculatedProducts = async ({
         actual_price: `${markedPrice.toFixed(2)}`,
         product_images: formattedImages,
         is_fav: !!(p.wishlists && p.wishlists.length > 0),
+        is_in_cart: !!(p.cart && p.cart.length > 0),
         categories: undefined,
         retailers: undefined,
         wishlists: undefined,
+        cart: undefined,
       };
     });
 

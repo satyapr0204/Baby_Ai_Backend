@@ -36,6 +36,8 @@ const {
   getAllData,
   getAllOrderData,
   getAllTransactions,
+  resetRetailorPrice,
+  previewMessage,
 } = require("../../controllers/AdminControllers/controllers");
 
 const { authenticateToken } = require("../../middleware/authMiddleware");
@@ -98,6 +100,12 @@ adminRouter.get(
   "/all-flash-messages",
   authenticateToken,
   fetchAllFlashMessages,
+);
+
+adminRouter.post(
+  "/preview-messages",
+  authenticateToken,
+  previewMessage,
 );
 
 adminRouter.post(
@@ -215,6 +223,12 @@ adminRouter.get("/pages", authenticateToken, allStaticPages);
 
 // Category Routes
 adminRouter.get("/categories", authenticateToken, allCategories);
+
+adminRouter.post(
+  "/reset-price-retailer",
+  authenticateToken,
+  resetRetailorPrice,
+);
 
 adminRouter.post(
   "/categories-details",

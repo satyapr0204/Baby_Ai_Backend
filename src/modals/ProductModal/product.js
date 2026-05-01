@@ -33,7 +33,7 @@
 // };
 
 const { DataTypes } = require("sequelize");
-const { sequelize } = require("../../../dbConfig.js"); // Path check kar lena
+const { sequelize } = require("../../../dbConfig.js");
 
 // Import associated models
 const Fabric = require("./fabric.js");
@@ -99,10 +99,13 @@ Product.hasMany(Wishlist, { foreignKey: "product_id", as: "wishlists" });
 Wishlist.belongsTo(Product, { foreignKey: "product_id", as: "product" });
 Product.hasMany(Cart, { foreignKey: "product_id", as: "cart" });
 Cart.belongsTo(Product, { foreignKey: "product_id", as: "product" });
+
 Retailer.hasMany(Product, { 
     foreignKey: "retailer_id", 
     as: "retailers" 
 });
+
+Category.hasMany(Product, { foreignKey: "category_id", as: "categories" });
 
 // Sync Logic
 (async () => {

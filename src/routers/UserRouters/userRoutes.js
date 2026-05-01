@@ -30,6 +30,7 @@ const {
   colorsPreferenceList,
   getAllSizes,
   allFilterData,
+  proxyImage,
 } = require("../../controllers/UserControllers/controllers");
 const { authenticateToken } = require("../../middleware/authMiddleware");
 const validateBody = require("../../middleware/validator");
@@ -139,6 +140,8 @@ userRouter.post(
   productCategoryWiseData,
 );
 
+userRouter.get("/proxy-image", proxyImage);
+
 // Baby profile api
 userRouter.post(
   "/baby-profile",
@@ -235,7 +238,9 @@ userRouter.post(
 
 userRouter.get("/fetch-cart-items", authenticateToken, fetchAllCartItems);
 
-userRouter.get('/filter-data',authenticateToken,allFilterData)
+userRouter.get("/filter-data", authenticateToken, allFilterData);
+
+
 
 // For static pages
 userRouter.get("/faqs", authenticateToken, getFaqs);
