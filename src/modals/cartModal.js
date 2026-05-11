@@ -2,6 +2,7 @@ const { DataTypes } = require("sequelize");
 const { sequelize } = require("../../dbConfig.js");
 const User = require("./userModal.js");
 const Product = require("./ProductModal/product.js");
+const Retailer = require("./ProductModal/retailer.js");
 
 const Cart = sequelize.define(
   "Cart",
@@ -14,6 +15,9 @@ const Cart = sequelize.define(
     product_id: {
       type: DataTypes.INTEGER,
       allowNull: true,
+    },
+    retailer_id: {
+      type: DataTypes.INTEGER,
     },
     quantity: {
       type: DataTypes.INTEGER,
@@ -39,6 +43,20 @@ Cart.belongsTo(User, {
 User.hasMany(Cart, {
   foreignKey: "user_id",
   as: "carts",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+Cart.belongsTo(Retailer, {
+  foreignKey: "retailer_id",
+  as: "cartRetailer",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+Retailer.hasMany(Cart, {
+  foreignKey: "retailer_id",
+  as: "cartRetailer",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });

@@ -15,7 +15,7 @@ const path = require("path");
 const Cart = require("../../modals/cartModal");
 const Category = require("../../modals/ProductModal/category");
 const Fabric = require("../../modals/ProductModal/fabric");
-const { Op } = require("sequelize");
+const { Op, Sequelize } = require("sequelize");
 const Retailer = require("../../modals/ProductModal/retailer");
 const { getCalculatedProducts } = require("../../utils/PriceHelper");
 const Color = require("../../modals/ProductModal/color");
@@ -24,12 +24,17 @@ const { processBabyData } = require("../AdminControllers/controllers");
 const Gender = require("../../modals/ProductModal/gender");
 const Brand = require("../../modals/ProductModal/brand");
 const axios = require("axios");
+const sharp = require("sharp");
+const StaticPage = require("../../modals/staticPageModal");
+const Order = require("../../modals/orderModal");
+const Transaction = require("../../modals/transactionModal");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
-const genrateOtpAndToken = async (input, name, channel) => {
+const genrateOtpAndToken = async (input, name, channel, country_code) => {
   const otp = crypto.randomInt(10000, 99999).toString();
   console.log("otp", otp);
   const expiryToken = await jwt.sign(
-    { input, otp, channel, name },
+    { input, otp, channel, name, country_code },
     process.env.JWT_SECRET,
     { expiresIn: "1m" },
   );
@@ -85,10 +90,15 @@ const ensureHttps = (data) => {
 
 const sendOtpForLogin = async (req, res, next) => {
   try {
-    const { input, name, channel } = req.body;
+    const { input, name, channel, country_code } = req.body;
     if (!input || !name || !channel)
       throw new CoustomError("Email Or Phone is required");
-    const { otp, expiryToken } = await genrateOtpAndToken(input, name, channel);
+    const { otp, expiryToken } = await genrateOtpAndToken(
+      input,
+      name,
+      channel,
+      country_code,
+    );
     if (channel === "email") {
       const mailOptions = {
         from: process.env.GMAIL_USER,
@@ -100,16 +110,16 @@ const sendOtpForLogin = async (req, res, next) => {
       await sendOtpOnEmail(mailOptions);
     } else if (channel === "phone") {
       const phoneStr = req.body.input.toString();
-      if (!phoneStr.startsWith("+")) {
-        throw new CoustomError(
-          "Phone number must start with a country code (e.g., +91)",
-          400,
-        );
-      }
+      // if (!phoneStr.startsWith("+")) {
+      //   throw new CoustomError(
+      //     "Phone number must start with a country code (e.g., +91)",
+      //     400,
+      //   );
+      // }
       const digitsOnly = phoneStr.replace(/\D/g, "");
-      if (digitsOnly.length < 10 || digitsOnly.length > 15) {
-        throw new CoustomError("Invalid phone number length", 400);
-      }
+      // if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+      //   throw new CoustomError("Invalid phone number length", 400);
+      // }
     }
     console.log(`OTP for ${input}: ${otp}`);
     return sendResponse(res, "OTP sent! Valid for 30 seconds.", 200, {
@@ -131,20 +141,20 @@ const verifyOtp = async (req, res, next) => {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (err) {
       if (err.name === "TokenExpiredError") {
-        return next(new CoustomError("OTP has expired (30s limit)", 401));
+        return next(new CoustomError("OTP has expired (30s limit)", 200));
       }
-      return next(new CoustomError("Invalid or corrupted token", 401));
+      return next(new CoustomError("Invalid or corrupted token", 200));
     }
 
     if (decoded.input !== input || decoded.otp !== otp) {
-      return next(new CoustomError("Invalid OTP", 401));
+      return next(new CoustomError("Invalid OTP", 200));
     }
 
     let user;
     const whereCondition =
       decoded.channel === "email"
         ? { email: input, is_delete: 0 }
-        : { phone: input, is_delete: 0 };
+        : { phone: input, is_delete: 0, country_code: decoded.country_code };
 
     user = await User.findOne({ where: whereCondition });
 
@@ -160,7 +170,7 @@ const verifyOtp = async (req, res, next) => {
         return next(
           new CoustomError(
             "Your account is inactive or deleted. Please contact support.",
-            403,
+            200,
           ),
         );
       }
@@ -185,7 +195,7 @@ const verifyOtp = async (req, res, next) => {
 
     return sendResponse(res, "Verified successfully!", 200, {
       user: user,
-      baby_profile: BabyProfileData,
+      ...(BabyProfileData && { baby_profile: BabyProfileData }),
       access_token: accessToken,
     });
   } catch (error) {
@@ -197,15 +207,20 @@ const verifyOtp = async (req, res, next) => {
 const sendOtpForUpdatePhoneEmail = async (req, res, next) => {
   try {
     const { name } = req.user;
-    const { input, channel } = req.body;
+    const { input, channel, country_code } = req.body;
     if (!input || !channel)
       throw new CoustomError("Email Or Phone is required", 400);
-    const { otp, expiryToken } = await genrateOtpAndToken(input, name, channel);
+    const { otp, expiryToken } = await genrateOtpAndToken(
+      input,
+      name,
+      channel,
+      country_code,
+    );
     const isAlreadyExist = await User.findOne({
       where:
         channel === "email"
           ? { email: input, is_delete: 0 }
-          : { phone: input, is_delete: 0 },
+          : { phone: input, is_delete: 0, country_code: country_code },
     });
     if (isAlreadyExist)
       throw new CoustomError(`This ${channel} is already registered.`, 404);
@@ -220,6 +235,7 @@ const sendOtpForUpdatePhoneEmail = async (req, res, next) => {
       };
       await sendOtpOnEmail(mailOptions);
     } else if (channel === "phone") {
+      const phoneStr = req.body.input.toString();
     }
     console.log(`OTP for ${input}: ${otp}`);
     return sendResponse(res, "OTP sent! Valid for 30 seconds.", 200, {
@@ -251,6 +267,7 @@ const verifyPhoneEmailForUpdate = async (req, res, next) => {
     }
     let user;
     let input = decoded.input;
+    let country_code = decoded.country_code;
     user = await User.findOne({
       where: {
         id,
@@ -259,7 +276,9 @@ const verifyPhoneEmailForUpdate = async (req, res, next) => {
     });
     if (!user) throw new CoustomError(`User not found.`, 404);
     const updateData =
-      decoded.channel === "email" ? { email: input } : { phone: input };
+      decoded.channel === "email"
+        ? { email: input }
+        : { phone: input, country_code: country_code };
     await user.update(updateData);
 
     return sendResponse(res, `${decoded.channel} updated successfully!`, 200, {
@@ -289,8 +308,72 @@ const colorsPreferenceList = async (req, res, next) => {
     if (!allColorList)
       throw new CoustomError("Color preference not found!", 404);
 
+    let uniqueColors = new Set();
+    let finalColors = [];
+
+    allColorList.forEach((item) => {
+      const splitNames = item.name.includes("/")
+        ? item.name.split("/")
+        : [item.name];
+
+      splitNames.forEach((name) => {
+        const trimmedName = name.trim();
+        if (
+          !uniqueColors.has(trimmedName.toLowerCase()) &&
+          isNaN(trimmedName)
+        ) {
+          uniqueColors.add(trimmedName.toLowerCase());
+          finalColors.push({
+            id: item.id,
+            name: trimmedName,
+          });
+        }
+      });
+    });
+
     sendResponse(res, "Fetching all color list", 200, {
-      allColorList,
+      allColorList: finalColors,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getAllPreferencesData = async (req, res, next) => {
+  try {
+    const [colorsData, sizes, febrics] = await Promise.all([
+      Color.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
+      Size.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
+      Fabric.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
+    ]);
+
+    let uniqueColors = new Set();
+    let finalColors = [];
+
+    colorsData.forEach((item) => {
+      const splitNames = item.name.includes("/")
+        ? item.name.split("/")
+        : [item.name];
+
+      splitNames.forEach((name) => {
+        const trimmedName = name.trim();
+        if (
+          !uniqueColors.has(trimmedName.toLowerCase()) &&
+          isNaN(trimmedName)
+        ) {
+          uniqueColors.add(trimmedName.toLowerCase());
+          finalColors.push({
+            id: item.id,
+            name: trimmedName,
+          });
+        }
+      });
+    });
+
+    sendResponse(res, "Fetching all preferences data", 200, {
+      colors: finalColors,
+      sizes,
+      fabrics: febrics,
     });
   } catch (error) {
     next(error);
@@ -318,6 +401,19 @@ const userProfile = async (req, res, next) => {
         id,
         is_delete: 0,
       },
+      attributes: {
+        include: [
+          [
+            Sequelize.literal(`(
+          SELECT COUNT(*)
+          FROM user_wishlist AS wishlist
+          WHERE
+            wishlist.user_id = User.id
+        )`),
+            "wishlistCount",
+          ],
+        ],
+      },
       include: [
         {
           model: BabyProfile,
@@ -330,6 +426,7 @@ const userProfile = async (req, res, next) => {
       throw new CoustomError("User not found!", 404);
     }
     const user = await processBabyData(userData);
+
     sendResponse(res, "User and all baby profiles fetched successfully", 200, {
       user: user,
     });
@@ -567,7 +664,6 @@ const updateBabyProfileWithStep = async (req, res, next) => {
           typeof preferred_colors === "string"
             ? JSON.parse(preferred_colors)
             : preferred_colors;
-
         const babyPro = await BabyProfile.findOne({
           where: {
             id,
@@ -626,7 +722,7 @@ const homeData = async (req, res, next) => {
       where: {
         user_id: id,
       },
-      attributes: ["id", "baby_profile_image"], // Agar sirf images chahiye
+      attributes: ["id", "baby_profile_image"],
       raw: true,
     });
 
@@ -746,15 +842,15 @@ const allWishlistData = async (req, res, next) => {
       }),
     );
 
-    const securedProducts = productsWithPrices.map((product) => ({
-      ...product,
-      product_images: ensureHttps(product.product_images),
-    }));
+    // const securedProducts = productsWithPrices.map((product) => ({
+    //   ...product,
+    //   product_images: ensureHttps(product.product_images),
+    // }));
 
     const formattedRows = wishlistEntries.rows.map((item, index) => {
       return {
         wishlist_added_at: item.createdAt,
-        ...securedProducts[index],
+        ...productsWithPrices[index],
       };
     });
 
@@ -1183,6 +1279,7 @@ const fetchProductDetails = async (req, res, next) => {
   try {
     const { id } = req.body;
     const user_id = req.user.id;
+    const is_admin = req.user.is_admin;
     // const productData = await Product.findOne({
     //   where: {
     //     id,
@@ -1258,11 +1355,16 @@ const fetchProductDetails = async (req, res, next) => {
       product_id: id,
       user_id: user_id,
     });
-    // productDetails.product_images = ensureHttps(productDetails.product_images);
+    const babyInfo =
+      is_admin == 1
+        ? babies
+        : babies.map((b) => ({ baby_profile_image: b.baby_profile_image }));
+
+    console.log("babyInfo to be sent:", babyInfo);
+
     sendResponse(res, "Product detail fetched successfully", 200, {
-      // productDetails: responseData,
       productDetails: productDetails,
-      babies,
+      babies: babyInfo,
     });
   } catch (error) {
     next(error);
@@ -1627,6 +1729,7 @@ const addToCart = async (req, res, next) => {
       const newCartItem = await Cart.create({
         user_id,
         product_id: id,
+        retailer_id: productDetails.retailer_id || null,
         quantity,
         total_price: quantity * productDetails.sale_price,
       });
@@ -1652,50 +1755,78 @@ const updatedQuantityInCart = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const { id, quantity } = req.body;
+    // const cartItem = await Cart.findOne({
+    //   where: { user_id, id },
+    // });
+    // if (!cartItem) throw new CoustomError("Cart item not found", 404);
+    // const productData = await Product.findOne({
+    //   where: {
+    //     id,
+    //   },
+    // });
+    // if (!productData) throw new CoustomError("Product not found", 404);
+
+    // const productDetails = await getCalculatedProducts({
+    //   product_id: id,
+    //   user_id: user_id,
+    // });
+
+    // const updatedQuantity = cartItem.quantity + quantity;
+
+    // if (updatedQuantity > 10) {
+    //   throw new CoustomError(
+    //     "You cannot add more than 10 units of this product",
+    //     400,
+    //   );
+    // }
+    // if (updatedQuantity <= 0) {
+    //   await existingCartItem.destroy();
+    //   return sendResponse(res, "Product removed from cart successfully", 200);
+    // }
+
+    // cartItem.quantity = updatedQuantity;
+    // cartItem.total_price = updatedQuantity * productDetails.sale_price;
+    // await cartItem.save();
+
+    // const plainCartItem = cartItem.get({ plain: true });
+    // let resData = {
+    //   ...plainCartItem,
+    //   total_price: parseFloat(plainCartItem.total_price).toFixed(2),
+    //   actual_total_price: parseFloat(plainCartItem.actual_total_price).toFixed(
+    //     2,
+    //   ),
+    // };
+
+    if (quantity < 1 || quantity > 10) {
+      throw new CoustomError("Quantity must be between 1 and 10", 400);
+    }
+
     const cartItem = await Cart.findOne({
       where: { user_id, id },
     });
     if (!cartItem) throw new CoustomError("Cart item not found", 404);
-    const productData = await Product.findOne({
-      where: {
-        id,
-      },
-    });
-    if (!productData) throw new CoustomError("Product not found", 404);
 
     const productDetails = await getCalculatedProducts({
-      product_id: id,
+      product_id: cartItem.product_id,
       user_id: user_id,
     });
 
-    const updatedQuantity = cartItem.quantity + quantity;
+    if (!productDetails)
+      throw new CoustomError("Product details not found", 404);
 
-    if (updatedQuantity > 10) {
-      throw new CoustomError(
-        "You cannot add more than 10 units of this product",
-        400,
-      );
-    }
-    if (updatedQuantity <= 0) {
-      await existingCartItem.destroy();
-      return sendResponse(res, "Product removed from cart successfully", 200);
-    }
+    cartItem.quantity = quantity;
+    const salePrice = parseFloat(productDetails.sale_price) || 0;
+    const actualPrice = parseFloat(productDetails.actual_price) || 0;
 
-    cartItem.quantity = updatedQuantity;
-    cartItem.total_price = updatedQuantity * productDetails.sale_price;
+    cartItem.total_price = (quantity * salePrice).toFixed(2);
+    cartItem.actual_total_price = (quantity * actualPrice).toFixed(2);
+
     await cartItem.save();
-
     const plainCartItem = cartItem.get({ plain: true });
-    let resData = {
-      ...plainCartItem,
-      total_price: parseFloat(plainCartItem.total_price).toFixed(2),
-      actual_total_price: parseFloat(plainCartItem.actual_total_price).toFixed(
-        2,
-      ),
-    };
 
     return sendResponse(res, "Cart item quantity updated successfully", 200, {
-      resData,
+      ...plainCartItem,
+      max_quantity: 10,
     });
   } catch (error) {
     next(error);
@@ -1747,48 +1878,59 @@ const removeFromCart = async (req, res, next) => {
 const fetchAllCartItems = async (req, res, next) => {
   try {
     const { id: user_id } = req.user;
-    const cartItems = await Cart.findAll({
-      where: { user_id },
-      attributes: { exclude: ["createdAt", "updatedAt", "user_id", "category_name"] },
-    });
 
-    if (!cartItems.length) {
-      return sendResponse(res, "Cart is empty", 200, { cart_item: [] });
+    const [cartItems, savedAddress] = await Promise.all([
+      Cart.findAll({
+        where: { user_id },
+        attributes: {
+          exclude: ["createdAt", "updatedAt", "user_id", "category_name"],
+        },
+        raw: true,
+      }),
+      Address.findOne({
+        where: { user_id, is_default: 1 },
+      }),
+    ]);
+
+    if (!cartItems || cartItems.length === 0) {
+      return sendResponse(res, "Cart is empty", 200, {
+        saved_address: savedAddress,
+        cart_item: [],
+      });
     }
     const productIds = cartItems.map((item) => item.product_id);
     const productDetailsList = await getCalculatedProducts({
       user_id,
       product_id: productIds,
     });
-    const securedProducts = productDetailsList.map((product) => ({
-      ...product,
-      // product_images: ensureHttps(product.product_images),
-    }));
 
-    const productMap = new Map(
-      (Array.isArray(securedProducts)
-        ? securedProducts
-        : [securedProducts]
-      ).map((p) => [p.id.toString(), p]),
-    );
+    const detailsArray = Array.isArray(productDetailsList)
+      ? productDetailsList
+      : [productDetailsList];
+    const productMap = new Map(detailsArray.map((p) => [p.id.toString(), p]));
 
     const cartItemsWithDetails = cartItems.map((item) => {
-      const plainItem = item.get({ plain: true });
-      const details = productMap.get(plainItem.product_id.toString()) || null;
-      const finalSalePrice = details ? parseFloat(details.sale_price) : 0;
-      const finalActualPrice = details ? parseFloat(details.actual_price) : 0;
+      const details = productMap.get(item.product_id.toString()) || null;
+
+      const finalSalePrice = details ? parseFloat(details.sale_price) || 0 : 0;
+      const finalActualPrice = details
+        ? parseFloat(details.actual_price) || 0
+        : 0;
+      const qty = item.quantity || 0;
+
       return {
-        ...plainItem,
-        actual_total_price: (plainItem.quantity * finalActualPrice).toFixed(2),
-        total_price: (plainItem.quantity * finalSalePrice).toFixed(2),
+        ...item,
+        actual_total_price: (qty * finalActualPrice).toFixed(2),
+        total_price: (qty * finalSalePrice).toFixed(2),
         product: details,
         max_quantity: 10,
       };
     });
 
     sendResponse(res, "Cart items fetched successfully", 200, {
+      saved_address: savedAddress,
       cart_item: cartItemsWithDetails,
-      related_outfits: productDetailsList,
+      related_outfits: detailsArray,
     });
   } catch (error) {
     console.error("Error in fetchAllCartItems:", error);
@@ -1798,11 +1940,37 @@ const fetchAllCartItems = async (req, res, next) => {
 
 const allFilterData = async (req, res, next) => {
   try {
-    const [brands, colors, genders] = await Promise.all([
-      Brand.findAll(),
-      Color.findAll(),
-      Gender.findAll(),
+    const [brands, colorsData, genders, sizes, febrics] = await Promise.all([
+      Brand.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
+      Color.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
+      Gender.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
+      Size.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
+      Fabric.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
     ]);
+
+    let uniqueColors = new Set();
+    let finalColors = [];
+
+    colorsData.forEach((item) => {
+      const splitNames = item.name.includes("/")
+        ? item.name.split("/")
+        : [item.name];
+
+      splitNames.forEach((name) => {
+        const trimmedName = name.trim();
+        if (
+          !uniqueColors.has(trimmedName.toLowerCase()) &&
+          isNaN(trimmedName)
+        ) {
+          uniqueColors.add(trimmedName.toLowerCase());
+          finalColors.push({
+            id: item.id,
+            name: trimmedName,
+          });
+        }
+      });
+    });
+
     const priceOptions = [
       { id: 1, label: "$0 - $99", min_price: 0, max_price: 99 },
       { id: 2, label: "$100 - $199", min_price: 100, max_price: 199 },
@@ -1828,7 +1996,17 @@ const allFilterData = async (req, res, next) => {
       {
         filter_key: "color",
         filter_name: "Color",
-        options: colors,
+        options: finalColors,
+      },
+      {
+        filter_key: "size",
+        filter_name: "Size",
+        options: sizes,
+      },
+      {
+        filter_key: "fabric",
+        filter_name: "Fabric",
+        options: febrics,
       },
     ];
     sendResponse(res, "Filters fetched successfully", 200, { filters });
@@ -1837,6 +2015,649 @@ const allFilterData = async (req, res, next) => {
     next(error);
   }
 };
+
+const applayFilters = async (req, res, next) => {
+  try {
+    const user_id = req.user.id;
+    const { price, brand, gender, color, size, fabric, category_id } = req.body;
+    let productWhere = { sale_price: { [Op.gt]: 0 } };
+    if (category_id) productWhere.category_id = category_id;
+    if (brand?.length) productWhere.brand_id = { [Op.in]: brand };
+    if (gender?.length) productWhere.gender_id = { [Op.in]: gender };
+    if (color?.length) productWhere.color_id = { [Op.in]: color };
+    if (size?.length) productWhere.size_id = { [Op.in]: size };
+
+    let products = await getCalculatedProducts({
+      category_id,
+      user_id,
+      productWhereData: productWhere,
+    });
+
+    if (price) {
+      const min = parseFloat(price.min_price) || 0;
+      const max =
+        price.max_price !== null ? parseFloat(price.max_price) : Infinity;
+
+      let filteredResults = [];
+      for (let i = 0; i < products.length; i++) {
+        const sPrice = parseFloat(products[i].sale_price);
+        if (sPrice >= min && sPrice <= max) {
+          filteredResults.push(products[i]);
+        }
+      }
+      products = filteredResults;
+    }
+
+    return sendResponse(res, "Filters applied successfully", 200, {
+      count: products.length,
+      products,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const selectBabyProfile = async (req, res, next) => {
+  try {
+    const user_id = req.user.id;
+    const { baby_profile_id } = req.body;
+    const babyProfile = await BabyProfile.findOne({
+      where: {
+        id: baby_profile_id,
+        user_id,
+      },
+    });
+    if (!babyProfile) {
+      throw new CoustomError("Baby profile not found", 404);
+    }
+
+    const useExist = await User.findOne({
+      where: {
+        id: user_id,
+        is_delete: 0,
+      },
+    });
+    if (useExist) {
+      await useExist.update({
+        selected_baby: baby_profile_id,
+      });
+    }
+
+    sendResponse(res, "Baby profile selected successfully", 200, {
+      babyProfile,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const helpAndSupport = async (req, res, next) => {
+  try {
+    const { name, phone, country_code, email, message, subject } = req.body;
+
+    const mailOptions = {
+      from: process.env.GMAIL_USER,
+      to: process.env.SUPPORT_EMAIL,
+      subject: `[URGENT SUPPORT] - ${subject}`,
+      html: `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px; }
+            .card { background: #fff; border-radius: 10px; padding: 20px; border-top: 5px solid #00cccc; }
+            .header { color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+            .info-table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+            .info-table td { padding: 10px; border-bottom: 1px solid #f9f9f9; }
+            .label { font-weight: bold; color: #666; width: 150px; }
+            .msg-box { background: #fff5f5; padding: 15px; border-radius: 5px; margin-top: 15px; border: 1px solid #ffebeb; }
+            .footer { margin-top: 20px; font-size: 12px; color: #999; text-align: center; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <div class="header">
+                <h2>New Support Ticket: Baby AI</h2>
+                <p>A user is facing an issue and needs assistance.</p>
+            </div>
+            
+            <table class="info-table">
+                <tr>
+                    <td class="label">User Name:</td>
+                    <td>${name}</td>
+                </tr>
+                <tr>
+                    <td class="label">User Email:</td>
+                    <td>${email}</td>
+                </tr>
+                <tr>
+                    <td class="label">Phone Number:</td>
+                    <td>${country_code} ${phone}</td>
+                </tr>
+                <tr>
+                    <td class="label">Issue Subject:</td>
+                    <td><strong>${subject}</strong></td>
+                </tr>
+            </table>
+
+            <div class="label" style="margin-top:20px;">User Message:</div>
+            <div class="msg-box">
+                ${message || "No specific message provided."}
+            </div>
+
+            <p style="margin-top:25px; color: #ff4d4d;"><strong>Action:</strong> Please reach out to the user via email or phone to resolve this query.</p>
+        </div>
+        <div class="footer">
+            Admin Dashboard | Baby AI System Alert
+        </div>
+    </body>
+    </html>
+  `,
+    };
+
+    await sendOtpOnEmail(mailOptions);
+    sendResponse(res, "Your query has been submitted successfully", 200);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const staticPageDetails = async (req, res, next) => {
+  try {
+    const { id } = req.body;
+    const staticPage = await StaticPage.findOne({
+      where: {
+        id,
+        is_active: 1,
+      },
+      attributes: ["id", "title", "content"],
+    });
+    if (!staticPage) {
+      throw new CoustomError("Page not found", 404);
+    }
+    sendResponse(res, "Page details fetched successfully", 200, {
+      staticPage,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const placeOrder = async (req, res, next) => {
+  try {
+    const { id, shipping_address, payment_method } = req.body;
+    const userId = req.user.id;
+
+    const cartItems = await Cart.findAll({
+      where: { id: id, user_id: userId },
+      include: ["product"],
+    });
+
+    if (cartItems.length === 0) throw new CoustomError("Cart is empty", 404);
+
+    const productDetailsList = await getCalculatedProducts({
+      user_id: userId,
+      product_id: cartItems.map((item) => item.product_id),
+    });
+
+    const itemsList = cartItems.map((item) => {
+      const calculatedData = productDetailsList.find(
+        (p) => p.id === item.product_id,
+      );
+      return {
+        product_id: item.product_id,
+        product_name: item.product.name,
+        quantity: item.quantity,
+        price: calculatedData
+          ? calculatedData.sale_price
+          : item.product.sale_price,
+        subtotal:
+          (calculatedData
+            ? calculatedData.sale_price
+            : item.product.sale_price) * item.quantity,
+      };
+    });
+
+    const totalOrderAmount = itemsList.reduce(
+      (sum, item) => sum + item.subtotal,
+      0,
+    );
+
+    const totalOrderQty = itemsList.reduce(
+      (sum, item) => sum + item.quantity,
+      0,
+    );
+
+    const newOrder = await Order.create({
+      user_id: userId,
+      order_id: `ORD-${Date.now()}`,
+      items: itemsList,
+      total_amount: totalOrderAmount,
+      quantity: totalOrderQty,
+      shipping_address: shipping_address,
+      payment_method: payment_method,
+      order_status: "Placed",
+    });
+
+    await Cart.destroy({ where: { id: id, user_id: userId } });
+    return sendResponse(res, "Order Placed Successfully", 201, {
+      newOrder,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createPaymentIntent = async (req, res, next) => {
+  try {
+    const { id, shipping_address } = req.body;
+    const userId = req.user.id;
+
+    const cartItems = await Cart.findAll({
+      where: { id: id, user_id: userId },
+      include: ["product"],
+    });
+
+    if (cartItems.length === 0) throw new CoustomError("Cart is empty", 404);
+
+    const productDetailsList = await getCalculatedProducts({
+      user_id: userId,
+      product_id: cartItems.map((item) => item.product_id),
+    });
+
+    const itemsList = cartItems.map((item) => {
+      const calculatedData = productDetailsList.find(
+        (p) => p.id === item.product_id,
+      );
+      return {
+        product_id: item.product_id,
+        product_name: item.product.name,
+        quantity: item.quantity,
+        price: calculatedData
+          ? calculatedData.sale_price
+          : item.product.sale_price,
+        subtotal:
+          (calculatedData
+            ? calculatedData.sale_price
+            : item.product.sale_price) * item.quantity,
+      };
+    });
+
+    const totalOrderAmount = itemsList.reduce(
+      (sum, item) => sum + item.subtotal,
+      0,
+    );
+    console.log("Total Order Amount:", Math.round(totalOrderAmount));
+    const amountInPaise = Math.round(totalOrderAmount * 100);
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountInPaise,
+      currency: "inr",
+      description: `Payment for Order by User ${userId}`,
+      metadata: {
+        cart_id: JSON.stringify(id),
+        shipping_address: JSON.stringify(shipping_address),
+        customer_name: req.user?.name || "Guest",
+      },
+      automatic_payment_methods: { enabled: true },
+    });
+
+    res.status(200).send({
+      clientSecret: paymentIntent.client_secret,
+      amount: amountInPaise,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createCheckoutSession = async (req, res, next) => {
+  try {
+    const { id, shipping_address } = req.body;
+    const userId = req.user.id;
+
+    const cartItems = await Cart.findAll({
+      where: { id: id, user_id: userId },
+      include: ["product"],
+    });
+    // console.log("cartItems", cartItems);
+    if (cartItems.length === 0) throw new Error("Cart is empty");
+
+    const productDetailsList = await getCalculatedProducts({
+      user_id: userId,
+      product_id: cartItems.map((item) => item.product_id),
+    });
+
+    const itemsList = cartItems.map((item) => {
+      const calculatedData = productDetailsList.find(
+        (p) => p.id === item.product_id,
+      );
+      const finalPrice = calculatedData
+        ? calculatedData.sale_price
+        : item.product.sale_price;
+
+      return {
+        product_id: item.product_id,
+        product_name: item.product.product_name,
+        quantity: item.quantity,
+        price: finalPrice,
+        subtotal: finalPrice * item.quantity,
+      };
+    });
+
+    const totalOrderQty = itemsList.reduce(
+      (sum, item) => sum + item.quantity,
+      0,
+    );
+    const totalAmount = itemsList.reduce((sum, item) => sum + item.subtotal, 0);
+
+    const newOrder = await Order.create({
+      user_id: userId,
+      order_id: `ORD-${Date.now()}`,
+      items: itemsList,
+      quantity: totalOrderQty,
+      total_amount: totalAmount,
+      shipping_address: shipping_address,
+      order_status: "Pending",
+      order_date: new Date(),
+    });
+
+    // console.log("itemsList", itemsList);
+    const line_items = itemsList.map((item) => {
+      return {
+        price_data: {
+          // currency: "USD",
+          currency: "INR",
+          product_data: {
+            name: item.product_name,
+          },
+          unit_amount: Math.round(item.price * 100),
+        },
+        quantity: item.quantity,
+      };
+    });
+
+    const session = await stripe.checkout.sessions.create({
+      line_items: line_items,
+      mode: "payment",
+      invoice_creation: { enabled: true },
+      // success_url: `http://localhost:5173/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      // cancel_url: `http://localhost:5173/payment-cancelled`,
+      success_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      // cancel_url: `https://mern.yilstaging.com/payment-cancelled`,
+      cancel_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      metadata: {
+        order_id: newOrder.id, // Database ki primary key
+        cart_id: JSON.stringify(id),
+        user_id: userId,
+        shipping_address: JSON.stringify(shipping_address),
+      },
+    });
+
+    res.status(200).send({
+      url: session.url,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// const verifyPayment = async (req, res, next) => {
+//   try {
+//     const { sessionId } = req.body;
+
+//     if (!sessionId) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "Session ID is required" });
+//     }
+
+//     const existingTx = await Transaction.findOne({
+//       where: { stripe_session_id: sessionId },
+//     });
+
+//     if (existingTx) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "This transaction has already been processed.",
+//       });
+//     }
+//     let session;
+//     try {
+//       session = await stripe.checkout.sessions.retrieve(sessionId);
+//     } catch (stripeError) {
+//       if (stripeError.type === "StripeInvalidRequestError") {
+//         throw new CoustomError(
+//           "Invalid Session ID. No such checkout session found.",
+//           400,
+//         );
+//       }
+//       throw stripeError;
+//     }
+//     console.log("session", session);
+//     if (session.payment_status === "paid") {
+//       const userId = session.metadata.user_id;
+//       const cartIds = JSON.parse(session.metadata.cart_id);
+//       const shippingAddress = JSON.parse(session.metadata.shipping_address);
+
+//       const cartItems = await Cart.findAll({
+//         where: { id: cartIds, user_id: userId },
+//         include: ["product"],
+//       });
+
+//       const productDetailsList = await getCalculatedProducts({
+//         user_id: userId,
+//         product_id: cartItems.map((item) => item.product_id),
+//       });
+
+//       const itemsList = cartItems.map((item) => {
+//         const calculatedData = productDetailsList.find(
+//           (p) => p.id === item.product_id,
+//         );
+//         return {
+//           product_id: item.product_id,
+//           product_name: item.product.name,
+//           quantity: item.quantity,
+//           price: calculatedData
+//             ? calculatedData.sale_price
+//             : item.product.sale_price,
+//           subtotal:
+//             (calculatedData
+//               ? calculatedData.sale_price
+//               : item.product.sale_price) * item.quantity,
+//         };
+//       });
+
+//       const totalOrderQty = itemsList.reduce(
+//         (sum, item) => sum + item.quantity,
+//         0,
+//       );
+
+//       const newOrder = await Order.create({
+//         user_id: userId,
+//         order_id: `ORD-${Date.now()}`,
+//         items: itemsList,
+//         quantity: totalOrderQty,
+//         total_amount: session.amount_total / 100,
+//         shipping_address: shippingAddress,
+//         payment_method: session.payment_method_types[0],
+//         order_status: "Placed",
+//         order_date: new Date(),
+//       });
+
+//       await Transaction.create({
+//         user_id: userId,
+//         order_id: newOrder.id,
+//         stripe_session_id: sessionId,
+//         payment_intent_id: session.payment_intent,
+//         transaction_id: session.payment_intent,
+//         invoice_id: session.invoice,
+//         amount: session.amount_total / 100,
+//         status: session.payment_status,
+//         payment_method: session.payment_method_types[0],
+//       });
+
+//       const userData = await User.findOne({
+//         where: { id: userId },
+//       });
+//       let updateOderCount = userData.orders <= 0 ? 1 : userData.orders + 1;
+
+//       await userData.update({
+//         orders: updateOderCount,
+//       });
+
+//       await Cart.destroy({
+//         where: { id: cartIds, user_id: userId },
+//       });
+
+//       return sendResponse(
+//         res,
+//         "Payment verified and Order placed successfully",
+//         200,
+//         {
+//           orderId: newOrder.order_id,
+//         },
+//       );
+//     } else {
+//       throw new CoustomError("Payment was not successful", 400);
+//     }
+//   } catch (error) {
+//     console.error("Verification Error:", error);
+//     next(error);
+//   }
+// };
+
+const verifyPayment = async (req, res, next) => {
+  try {
+    const { sessionId } = req.body;
+    if (!sessionId) throw new CoustomError("Session ID is required", 400);
+
+    const existingTx = await Transaction.findOne({
+      where: { stripe_session_id: sessionId },
+    });
+    if (existingTx)
+      throw new CoustomError(
+        "This transaction has already been processed.",
+        400,
+      );
+
+    let session;
+    try {
+      session = await stripe.checkout.sessions.retrieve(sessionId);
+    } catch (err) {
+      throw new CoustomError("Invalid Session ID", 400);
+    }
+
+    const orderId = session.metadata.order_id;
+    const userId = session.metadata.user_id;
+    const cartIds = JSON.parse(session.metadata.cart_id);
+
+    const order = await Order.findByPk(orderId);
+    if (!order) throw new CoustomError("Order not found", 404);
+
+    if (session.payment_status === "paid") {
+      await order.update({
+        order_status: "Placed",
+        payment_method: session.payment_method_types[0],
+      });
+
+      await Transaction.create({
+        user_id: userId,
+        order_id: order.id,
+        stripe_session_id: sessionId,
+        payment_intent_id: session.payment_intent,
+        transaction_id: session.payment_intent,
+        amount: session.amount_total / 100,
+        status: session.payment_status,
+        invoice_id: session.invoice,
+        payment_method: session.payment_method_types[0],
+      });
+
+      const userData = await User.findByPk(userId);
+      if (userData) await userData.increment("orders", { by: 1 });
+
+      // Clear Cart
+      await Cart.destroy({ where: { id: cartIds, user_id: userId } });
+
+      return sendResponse(res, "Order placed successfully", 200, {
+        orderId: order.order_id,
+      });
+    } else {
+      await order.update({ order_status: "Failed" });
+
+      await Transaction.create({
+        user_id: userId,
+        order_id: order.id,
+        stripe_session_id: sessionId,
+        payment_intent_id: session.payment_intent,
+        transaction_id: session.payment_intent,
+        amount: session.amount_total / 100,
+        // status: session.payment_status,
+        status: "failed",
+        invoice_id: session.invoice,
+        payment_method: session.payment_method_types[0] || "n/a",
+      });
+
+      return res.status(200).json({
+        success: false,
+        message:
+          "Payment was not successful. Your order has been marked as failed.",
+        orderId: order.order_id,
+      });
+    }
+  } catch (error) {
+    console.error("Verification Error:", error);
+    next(error);
+  }
+};
+
+const generateAvatar = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Please upload an image file." });
+    }
+
+    const width = 250;
+    const radius = width / 2;
+
+    const circleMask = Buffer.from(
+      `<svg width="${width}" height="${width}">
+        <circle cx="${radius}" cy="${radius}" r="${radius}" fill="black" />
+      </svg>`,
+    );
+    console.log("circleMask", circleMask);
+    const processedImageBuffer = await sharp(req.file.buffer)
+      .resize(width, width, {
+        fit: "cover",
+        position: "center",
+      })
+      .composite([
+        {
+          input: circleMask,
+          blend: "dest-in",
+        },
+      ])
+      .png()
+      .toBuffer();
+    console.log("processedImageBuffer", processedImageBuffer);
+    const base64Avatar = processedImageBuffer.toString("base64");
+    const imageData = `data:image/png;base64,${base64Avatar}`;
+    res.status(200).json({
+      success: true,
+      message: "Avatar generated successfully",
+      avatar: imageData,
+    });
+  } catch (error) {
+    console.error("Avatar Generation Error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to process image. Make sure the file is a valid image.",
+    });
+    next(error);
+  }
+};
+
 module.exports = {
   sendOtpForLogin,
   verifyOtp,
@@ -1869,4 +2690,14 @@ module.exports = {
   fetchAllCartItems,
   allFilterData,
   proxyImage,
+  generateAvatar,
+  applayFilters,
+  selectBabyProfile,
+  staticPageDetails,
+  getAllPreferencesData,
+  helpAndSupport,
+  placeOrder,
+  createPaymentIntent,
+  createCheckoutSession,
+  verifyPayment,
 };

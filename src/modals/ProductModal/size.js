@@ -15,7 +15,7 @@ const Size = sequelize.define(
   {
     name: {
       type: DataTypes.STRING,
-      unique: true,
+      // unique: true,
     },
   },
   {

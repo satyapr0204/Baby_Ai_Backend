@@ -9,6 +9,7 @@ const sequelize = new Sequelize(
   {
     host: process.env.DB_HOST,
     dialect: "mysql",
+    logging: false,
     pool: {
       max: 5,
       min: 0,
@@ -17,29 +18,6 @@ const sequelize = new Sequelize(
     },
   },
 );
-
-
-// const Admin=require('./src/modals/adminsModal')
-// const User=require('./src/modals/userModal')
-// const BabyProfile=require('./src/modals/babyProfileModal')
-// const Banner=require('./src/modals/bannerModal')
-// const Cart=require('./src/modals/cartModal')
-// const FAQ=require('./src/modals/faqModal')
-// const FlashMessage=require('./src/modals/flashMessageModal')
-// const FlashMessageEnable=require('./src/modals/flashMessageEnableModa')
-// const MinAndMax=require('./src/modals/minAndMaxModal')
-// const StaticPage=require('./src/modals/staticPageModal')
-// const Address=require('./src/modals/addressModal')
-// const Brand=require('./src/modals/ProductModal/brand')
-// const Wishlist=require('./src/modals/userWishlistModal')
-// const Category=require('./src/modals/ProductModal/category')
-// const Color=require('./src/modals/ProductModal/color')
-// const Fabric=require('./src/modals/ProductModal/fabric')
-// const Gender=require('./src/modals/ProductModal/gender')
-// const Product=require('./src/modals/ProductModal/product')
-// const Retailer=require('./src/modals/ProductModal/retailer')
-// const Size=require('./src/modals/ProductModal/size')
-
 
 (async () => {
   try {

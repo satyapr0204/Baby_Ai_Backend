@@ -132,9 +132,10 @@ const getCalculatedProducts = async ({
   category_id,
   product_id,
   user_id = null,
+  productWhereData = {}
 }) => {
   try {
-    let productWhere = { sale_price: { [Op.gt]: 0 } };
+    let productWhere = { sale_price: { [Op.gt]: 0 }, ...productWhereData };
     if (product_id) {
       productWhere.id = Array.isArray(product_id)
         ? { [Op.in]: product_id }
@@ -293,7 +294,6 @@ const getCalculatedProducts = async ({
         color: formatValue(p.color),
         size: formatValue(p.size),
         brand: formatValue(p.brand),
-        // description: p.description ? p.description.replace(/<[^>]&*>/g, '') : "",
         discount_applied: `${discountPct}%`,
         category_name: category?.name || "N/A",
         sale_price: finalPrice > 0 ? finalPrice.toFixed(2) : cost.toFixed(2),
@@ -305,9 +305,9 @@ const getCalculatedProducts = async ({
         retailers: undefined,
         wishlists: undefined,
         cart: undefined,
+        product_url: undefined,
       };
     });
-
     // return product_id ? result[0] : result;
     return product_id && !Array.isArray(product_id) ? result[0] : result;
   } catch (error) {

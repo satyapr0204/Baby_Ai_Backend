@@ -18,7 +18,7 @@ const Brand = sequelize.define(
   {
     name: {
       type: DataTypes.STRING,
-      unique: true,
+      // unique: true,
     },
   },
   {

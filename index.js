@@ -1,68 +1,218 @@
+// require("./dbConfig");
+// const dotenv = require("dotenv");
+// dotenv.config();
+// const express = require("express");
+// const PORT = process.env.PORT || 8080;
+// const app = express();
+// const cors = require("cors");
+// var morgan = require("morgan");
+// const path = require("path");
+// const helmet = require('helmet');
+// const compression = require('compression');
+// const rateLimit = require('express-rate-limit');
+
+// // Custom Error Handling
+// const CoustomError = require("./src/utils/CoustomError");
+// const { sendError } = require("./src/utils/coustomResponse");
+
+// // Routes Imports
+// // const dobaDataRoute = require("./src/routers/dobaDataRoute");
+// const admin = require("./src/routers/AdminRouters/adminRouters");
+// const user = require("./src/routers/UserRouters/userRoutes");
+// const productRoutes = require("./src/routers/ProductRouts/productRoutes");
+
+// // const { syncCategories, syncRetailers } = require("./cron-task");
+
+// // Middleware
+// app.use(cors());
+// app.use(morgan("dev"));
+// app.use(express.json());
+// app.use(express.urlencoded({ extended: true }));
+
+// // Cron Job
+// // syncCategories();
+// // syncRetailers();
+
+// // Log every incoming request for debugging
+// app.use((req, res, next) => {
+//   console.log(`[REQUEST] ${req.method} ${req.url}`);
+//   next();
+// });
+
+// // Image Acces from folder
+// app.use(
+//   "/baby-image",
+//   express.static(path.join(__dirname, "./src/BabyProfileImage")),
+// );
+// app.use("/banners", express.static(path.join(__dirname, "./src/Banners")));
+
+// // Routes
+// // app.use("/api/doba-data", dobaDataRoute);
+// // app.use("/api/admin", admin);
+// // app.use("/api/user", user);
+
+// app.use("/admin", admin);
+// app.use("/user", user);
+// app.use("/api/products", productRoutes);
+// // Global Error Handling Middleware
+// app.use((err, req, res, next) => {
+//   console.error("[ERROR]", err.message);
+//   if (!(err instanceof CoustomError)) {
+//     err = new CoustomError(
+//       err.message || "Internal Server Error",
+//       err.statusCode || 500,
+//     );
+//   }
+//   sendError(res, err);
+// });
+
+// app.listen(PORT, "127.0.0.1", () => {
+//   console.log(`Server is running on http://127.0.0.1:${PORT}`);
+// });
+
 require("./dbConfig");
 const dotenv = require("dotenv");
 dotenv.config();
-const express = require("express");
-const PORT = process.env.PORT || 8080;
-const app = express();
-const cors = require("cors");
-var morgan = require("morgan");
-const path = require("path");
 
-// Custom Error Handling
+const express = require("express");
+const cors = require("cors");
+const morgan = require("morgan");
+const path = require("path");
+const helmet = require("helmet");
+const compression = require("compression");
+const rateLimit = require("express-rate-limit");
+
+// Custom Utilities
 const CoustomError = require("./src/utils/CoustomError");
 const { sendError } = require("./src/utils/coustomResponse");
 
 // Routes Imports
-// const dobaDataRoute = require("./src/routers/dobaDataRoute");
-const admin = require("./src/routers/AdminRouters/adminRouters");
-const user = require("./src/routers/UserRouters/userRoutes");
+const adminRoutes = require("./src/routers/AdminRouters/adminRouters");
+const userRoutes = require("./src/routers/UserRouters/userRoutes");
 const productRoutes = require("./src/routers/ProductRouts/productRoutes");
 
-// const { syncCategories, syncRetailers } = require("./cron-task");
+const app = express();
+app.set("trust proxy", 1);
+const PORT = process.env.PORT || 8080;
 
-// Middleware
-app.use(cors());
+// ==========================================
+// 1. GLOBAL SECURITY MIDDLEWARES
+// ==========================================
+app.use(helmet());
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  message: {
+    status: 429,
+    message: "Too many requests, please try again after 15 minutes.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+0;
+
+app.use("/", limiter);
+
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    credentials: true,
+  }),
+);
+
+// ==========================================
+// 2. PERFORMANCE & LOGGING
+// ==========================================
+app.use(compression());
 app.use(morgan("dev"));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "10kb" }));
+app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 
-// Cron Job
-// syncCategories();
-// syncRetailers();
-
-// Log every incoming request for debugging
 app.use((req, res, next) => {
   console.log(`[REQUEST] ${req.method} ${req.url}`);
   next();
 });
 
-// Image Acces from folder
+// ==========================================
+// 3. STATIC FILES HANDLING
+// ==========================================
+const staticOptions = {
+  maxAge: "1d",
+  etag: true,
+};
+
 app.use(
   "/baby-image",
-  express.static(path.join(__dirname, "./src/BabyProfileImage")),
+  express.static(path.join(__dirname, "src/BabyProfileImage"), staticOptions),
 );
-app.use("/banners", express.static(path.join(__dirname, "./src/Banners")));
 
-// Routes
-// app.use("/api/doba-data", dobaDataRoute);
-// app.use("/api/admin", admin);
-// app.use("/api/user", user);
+app.use(
+  "/banners",
+  express.static(path.join(__dirname, "src/Banners"), staticOptions),
+);
 
-app.use("/admin", admin);
-app.use("/user", user);
+app.use("/admin", adminRoutes);
+app.use("/user", userRoutes);
 app.use("/api/products", productRoutes);
-// Global Error Handling Middleware
+
+// Catch-all route for undefined paths (Using regex for Express 5 compatibility)
+// app.all("(.*)", (req, res, next) => {
+//     next(new CoustomError(`Can't find ${req.originalUrl} on this server!`, 404));
+// });
+
+app.use((req, res, next) => {
+  const error = new CoustomError(
+    `Can't find ${req.originalUrl} on this server!`,
+    404,
+  );
+  next(error);
+});
+
+// Global Error Handler
 app.use((err, req, res, next) => {
-  console.error("[ERROR]", err.message);
+  err.statusCode = err.statusCode || 500;
+  err.status = err.status || "error";
+
+  if (process.env.NODE_ENV === "development") {
+    console.error("[DEV ERROR] 💥", {
+      message: err.message,
+      stack: err.stack,
+      path: req.originalUrl,
+    });
+  } else {
+    console.error("[PROD ERROR] 💥", err.message);
+  }
+
   if (!(err instanceof CoustomError)) {
     err = new CoustomError(
       err.message || "Internal Server Error",
-      err.statusCode || 500,
+      err.statusCode,
     );
   }
+
   sendError(res, err);
 });
 
-app.listen(PORT, "127.0.0.1", () => {
-  console.log(`Server is running on http://127.0.0.1:${PORT}`);
+const server = app.listen(PORT, () => {
+  console.log(
+    `🚀 Server running in ${process.env.NODE_ENV || "development"} mode`,
+  );
+  console.log(`📡 URL: http://localhost:${PORT}`);
+});
+
+process.on("unhandledRejection", (err) => {
+  console.log("UNHANDLED REJECTION! 🌑 Shutting down...");
+  console.error(err.name, err.message);
+  server.close(() => {
+    process.exit(1);
+  });
+});
+
+process.on("SIGTERM", () => {
+  console.log("👋 SIGTERM RECEIVED. Shutting down gracefully");
+  server.close(() => {
+    console.log("💥 Process terminated!");
+  });
 });

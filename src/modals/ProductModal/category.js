@@ -6,7 +6,7 @@ const Category = sequelize.define(
   {
     name: {
       type: DataTypes.STRING,
-      unique: true,
+      // unique: true,
     },
     image: {
       type: DataTypes.STRING,

@@ -61,7 +61,6 @@ const getOrCreate = async (Model, value) => {
   if (!record) {
     record = await Model.create({ name });
   }
-
   return record.id;
 };
 

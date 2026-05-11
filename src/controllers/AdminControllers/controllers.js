@@ -109,13 +109,10 @@ const processBabyData = async (data) => {
   const isArray = Array.isArray(data);
   let rawData = isArray ? data : [data];
 
-  // Convert to plain objects
   rawData = rawData.map((d) =>
     typeof d.toJSON === "function" ? d.toJSON() : d,
   );
 
-  // 1. Pata lagao ki ye User hai ya Baby
-  // Agar pehle element ke paas 'fabric_preferences' hai, matlab ye Baby array hai
   const isDirectBabyArray =
     rawData.length > 0 && "fabric_preferences" in rawData[0];
 
@@ -123,7 +120,6 @@ const processBabyData = async (data) => {
   if (isDirectBabyArray) {
     babiesToProcess = rawData;
   } else {
-    // Purana logic: User ke andar se babies nikaalo
     rawData.forEach((user) => {
       if (user.babies) babiesToProcess.push(...user.babies);
     });
@@ -141,17 +137,16 @@ const processBabyData = async (data) => {
     }
   };
 
-  // 2. IDs collect karein
   babiesToProcess.forEach((baby) => {
     parseIds(baby.fabric_preferences).forEach((id) =>
       fabricIds.add(id.toString()),
     );
+
     parseIds(baby.preferred_colors).forEach((id) =>
       colorIds.add(id.toString()),
     );
   });
 
-  // 3. Database fetch (Same as before)
   const [fabrics, colors] = await Promise.all([
     fabricIds.size > 0
       ? Fabric.findAll({
@@ -168,15 +163,29 @@ const processBabyData = async (data) => {
   ]);
 
   const fabricMap = Object.fromEntries(
-    fabrics.map((f) => [f.id.toString(), f.name]),
-  );
-  const colorMap = Object.fromEntries(
-    colors.map((c) => [c.id.toString(), c.name]),
+    fabrics.map((f) => [f.id.toString(), { id: f.id, name: f.name }]),
   );
 
-  // 4. Data Map karein
+  // const colorMap = Object.fromEntries(
+  //   colors.map((c) => [c.id.toString(), c.name]),
+  // );
+
+  // const colorMap = {};
+  // colors.forEach((c) => {
+  //   const id = c.id.toString();
+  //   colorMap[id] = c.name.split("/").map((s) => s.trim());
+  // });
+
+  const colorMap = {};
+  colors.forEach((c) => {
+    const id = c.id.toString();
+    colorMap[id] = c.name.split("/").map((s) => ({
+      id: c.id,
+      name: s.trim(),
+    }));
+  });
+
   babiesToProcess.forEach((baby) => {
-    // Image path fix
     if (
       baby.baby_profile_image &&
       !baby.baby_profile_image.startsWith("http")
@@ -184,13 +193,16 @@ const processBabyData = async (data) => {
       baby.baby_profile_image = `${process.env.BACKEND_URL}/baby-image/${baby.baby_profile_image}`;
     }
 
-    // Fabric mapping
     const fIds = parseIds(baby.fabric_preferences);
-    baby.fabric_preferences = fIds.map((id) => fabricMap[id.toString()] || id);
 
-    // Color mapping
+    baby.fabric_preferences = fIds.map((id) => {
+      const fabricData = fabricMap[id.toString()];
+      return fabricData ? fabricData : { id: id, name: "Unknown" };
+    });
+
     const cIds = parseIds(baby.preferred_colors);
-    baby.preferred_colors = cIds.map((id) => colorMap[id.toString()] || id);
+    const allColors = cIds.flatMap((id) => colorMap[id.toString()] || id);
+    baby.preferred_colors = [...new Set(allColors)];
   });
 
   return isArray ? rawData : rawData[0];
@@ -274,7 +286,6 @@ const updateGlobalStatus = async (req, res, next) => {
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ");
 
-    // sendResponse(res, `${formattedType} status updated successfully!`, 200);
     sendResponse(
       res,
       `${formattedType} has been ${record.is_active == 1 ? "Activted" : "Deactivated"} successfully!`,
@@ -335,6 +346,7 @@ const globalDelete = async (req, res, next) => {
     next(error);
   }
 };
+
 const globleFlashMessageEnable = async (req, res, next) => {
   try {
     const entryId = 1;

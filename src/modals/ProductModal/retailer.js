@@ -10,7 +10,7 @@ const Retailer = sequelize.define(
     },
     name: {
       type: DataTypes.STRING,
-      unique: true,
+      // unique: true,
     },
     is_active: {
       type: DataTypes.INTEGER,

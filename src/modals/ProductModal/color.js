@@ -18,7 +18,7 @@ const { sequelize } = require("../../../dbConfig");
 const Color = sequelize.define("Color", {
   name: {
     type: DataTypes.STRING,
-    unique: true,
+    // unique: true,
   },
 }, {
   tableName: "colors",

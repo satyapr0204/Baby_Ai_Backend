@@ -87,7 +87,6 @@ const Product = sequelize.define(
   },
 );
 
-
 Product.belongsTo(Fabric, { foreignKey: "fabric_id", as: "fabric" });
 Product.belongsTo(Color, { foreignKey: "color_id", as: "color" });
 Product.belongsTo(Size, { foreignKey: "size_id", as: "size" });
@@ -100,9 +99,9 @@ Wishlist.belongsTo(Product, { foreignKey: "product_id", as: "product" });
 Product.hasMany(Cart, { foreignKey: "product_id", as: "cart" });
 Cart.belongsTo(Product, { foreignKey: "product_id", as: "product" });
 
-Retailer.hasMany(Product, { 
-    foreignKey: "retailer_id", 
-    as: "retailers" 
+Retailer.hasMany(Product, {
+  foreignKey: "retailer_id",
+  as: "retailers",
 });
 
 Category.hasMany(Product, { foreignKey: "category_id", as: "categories" });
@@ -110,7 +109,8 @@ Category.hasMany(Product, { foreignKey: "category_id", as: "categories" });
 // Sync Logic
 (async () => {
   try {
-    await Product.sync({ alter: true });
+    // await Product.sync({ alter: true });
+    await Product.sync();
     console.log("✅ Product table synced successfully");
   } catch (err) {
     console.error("❌ Error syncing Product table:", err);

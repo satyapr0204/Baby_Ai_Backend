@@ -16,7 +16,7 @@ const { sequelize } = require("../../../dbConfig");
 const Gender = sequelize.define("Gender", {
   name: {
     type: DataTypes.STRING,
-    unique: true,
+    // unique: true,
   },
 }, {
   tableName: "genders",

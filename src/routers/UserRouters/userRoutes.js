@@ -31,30 +31,51 @@ const {
   getAllSizes,
   allFilterData,
   proxyImage,
+  generateAvatar,
+  applayFilters,
+  selectBabyProfile,
+  staticPageDetails,
+  getAllPreferencesData,
+  helpAndSupport,
+  placeOrder,
+  createPaymentIntent,
+  createCheckoutSession,
+  verifyPayment,
 } = require("../../controllers/UserControllers/controllers");
 const { authenticateToken } = require("../../middleware/authMiddleware");
 const validateBody = require("../../middleware/validator");
 const multer = require("multer");
 const fs = require("fs");
-const { getFaqs } = require("../../controllers/AdminControllers/controllers");
+const {
+  getFaqs,
+  allStaticPages,
+} = require("../../controllers/AdminControllers/controllers");
+const createMulterStorage = require("../../utils/path-to-above-file");
 const userRouter = require("express").Router();
 
 // Multer
-const uploadBabyProfile = path.join(__dirname, "../../BabyProfileImage");
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    if (!fs.existsSync(uploadBabyProfile)) {
-      fs.mkdirSync(uploadBabyProfile, { recursive: true });
-    }
-    cb(null, uploadBabyProfile);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueName + path.extname(file.originalname));
-  },
-});
+// const uploadBabyProfile = path.join(__dirname, "../../BabyProfileImage");
 
-const uploadBabyImage = multer({ storage });
+// const storage = multer.diskStorage({
+//   destination: (req, file, cb) => {
+//     if (!fs.existsSync(uploadBabyProfile)) {
+//       fs.mkdirSync(uploadBabyProfile, { recursive: true });
+//     }
+//     cb(null, uploadBabyProfile);
+//   },
+//   filename: (req, file, cb) => {
+//     const uniqueName = Date.now() + "-" + Math.round(Math.random() * 1e9);
+//     cb(null, uniqueName + path.extname(file.originalname));
+//   },
+// });
+
+// const uploadBabyImage = multer({ storage });
+
+const uploadBabyProfileDir = path.join(__dirname, "../../BabyProfileImage");
+const uploadBabyImage = createMulterStorage(uploadBabyProfileDir);
+
+const uploadProfileAvatarDir = path.join(__dirname, "../../ProfileAvatarImage");
+const uploadUserAvatar = createMulterStorage(uploadProfileAvatarDir);
 
 // Auth api
 userRouter.post(
@@ -90,6 +111,8 @@ userRouter.get(
   authenticateToken,
   colorsPreferenceList,
 );
+
+userRouter.get("/preferences", authenticateToken, getAllPreferencesData);
 
 userRouter.get("/size-list", authenticateToken, getAllSizes);
 
@@ -240,9 +263,59 @@ userRouter.get("/fetch-cart-items", authenticateToken, fetchAllCartItems);
 
 userRouter.get("/filter-data", authenticateToken, allFilterData);
 
+userRouter.post("/filter", authenticateToken, applayFilters);
 
+userRouter.post("/select-baby-profile", authenticateToken, selectBabyProfile);
 
 // For static pages
 userRouter.get("/faqs", authenticateToken, getFaqs);
+
+userRouter.get("/all-static-pages", authenticateToken, allStaticPages);
+
+userRouter.post(
+  "/help-and-support",
+  authenticateToken,
+  validateBody([
+    "name",
+    "email",
+    "message",
+    "subject",
+    "phone",
+    "country_code",
+  ]),
+  helpAndSupport,
+);
+
+userRouter.post(
+  "/static-page-details",
+  authenticateToken,
+  validateBody(["id"]),
+  staticPageDetails,
+);
+
+userRouter.post(
+  "/generate-avatar",
+  authenticateToken,
+  uploadUserAvatar.single("avatar_image"),
+  // validateBody(["baby_name", "baby_dob", "baby_gender"]),
+  generateAvatar,
+);
+
+// Oder api and checkout
+userRouter.post(
+  "/place-order",
+  authenticateToken,
+  validateBody(["id", "shipping_address"]),
+  // createPaymentIntent,
+  createCheckoutSession,
+  // placeOrder,
+);
+
+userRouter.post(
+  "/verify-payment",
+  // authenticateToken,
+  validateBody(["sessionId"]),
+  verifyPayment,
+);
 
 module.exports = userRouter;

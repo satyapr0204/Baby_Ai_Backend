@@ -15,7 +15,7 @@ const { sequelize } = require("../../../dbConfig");
 const Fabric = sequelize.define("Fabric", {
   name: {
     type: DataTypes.STRING,
-    unique: true,
+    // unique: true,
   },
 }, {
   tableName: "fabrices",
