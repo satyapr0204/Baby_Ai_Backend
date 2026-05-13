@@ -25,6 +25,9 @@ const Transaction = sequelize.define(
     invoice_id: {
       type: DataTypes.STRING,
     },
+    invoice_url: {
+      type: DataTypes.TEXT,
+    },
     amount: {
       type: DataTypes.FLOAT,
     },
@@ -33,7 +36,7 @@ const Transaction = sequelize.define(
     },
     payment_method: {
       type: DataTypes.STRING,
-    }
+    },
   },
   {
     tableName: "transactions",
@@ -43,6 +46,7 @@ const Transaction = sequelize.define(
 
 Transaction.belongsTo(User, { as: "user", foreignKey: "user_id" });
 Transaction.belongsTo(Order, { as: "order", foreignKey: "order_id" });
+Order.hasOne(Transaction, { as: "transaction", foreignKey: "order_id" });
 
 (async () => {
   await Transaction.sync({ alter: true });

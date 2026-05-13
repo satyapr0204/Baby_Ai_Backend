@@ -54,7 +54,6 @@ const User = sequelize.define(
       type: DataTypes.STRING,
       defaultValue: null,
     },
-
     fcm_token: {
       type: DataTypes.STRING,
     },

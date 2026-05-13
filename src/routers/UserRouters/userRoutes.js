@@ -41,6 +41,12 @@ const {
   createPaymentIntent,
   createCheckoutSession,
   verifyPayment,
+  fetchAllOrderedItems,
+  buyAgain,
+  createReorderCheckoutSession,
+  getAllOrders,
+  fetchOrderDetails,
+  cancelMyOrder,
 } = require("../../controllers/UserControllers/controllers");
 const { authenticateToken } = require("../../middleware/authMiddleware");
 const validateBody = require("../../middleware/validator");
@@ -261,6 +267,8 @@ userRouter.post(
 
 userRouter.get("/fetch-cart-items", authenticateToken, fetchAllCartItems);
 
+userRouter.get("/my-closet", authenticateToken, fetchAllOrderedItems);
+
 userRouter.get("/filter-data", authenticateToken, allFilterData);
 
 userRouter.post("/filter", authenticateToken, applayFilters);
@@ -309,6 +317,26 @@ userRouter.post(
   // createPaymentIntent,
   createCheckoutSession,
   // placeOrder,
+);
+
+userRouter.post(
+  "/buy-again",
+  authenticateToken,
+  validateBody(["id"]),
+  buyAgain,
+);
+
+userRouter.post("/re-order", authenticateToken, createReorderCheckoutSession);
+
+userRouter.get("/fetch-all-orders", authenticateToken, getAllOrders);
+
+userRouter.post("/order-details", authenticateToken, fetchOrderDetails);
+
+userRouter.post(
+  "/cancel-order",
+  authenticateToken,
+  validateBody(["id", "reason"]),
+  cancelMyOrder,
 );
 
 userRouter.post(

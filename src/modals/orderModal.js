@@ -17,7 +17,7 @@ const Order = sequelize.define(
     },
     items: {
       type: DataTypes.JSON,
-      allowNull: false
+      allowNull: false,
     },
     quantity: {
       type: DataTypes.INTEGER,
@@ -38,7 +38,11 @@ const Order = sequelize.define(
       type: DataTypes.INTEGER,
       defaultValue: 0,
     },
-    return_reason: {
+    is_cancelled: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
+    reason: {
       type: DataTypes.STRING,
       defaultValue: null,
     },
