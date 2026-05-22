@@ -1,104 +1,3 @@
-// const { Op } = require("sequelize");
-// const { Wishlist } = require("../modals/userWishlistModal");
-// const Product = require("../modals/ProductModal/product");
-// const Category = require("../modals/ProductModal/category");
-// const Retailer = require("../modals/ProductModal/retailer");
-// /**
-//  * Get Calculated Products
-//  * @param {Object} params - { category_id, product_id, user_id }
-//  */
-// const getCalculatedProducts = async ({
-//   category_id,
-//   product_id,
-//   user_id = null,
-// }) => {
-//   try {
-//     let productWhere = { sale_price: { [Op.gt]: 0 } };
-//     if (product_id) productWhere.id = product_id;
-//     if (category_id) productWhere.category_id = category_id;
-
-//     const products = await Product.findAll({
-//       where: productWhere,
-//       include: [
-//         {
-//           model: Category,
-//           as: "categories",
-//           where: { is_active: 1 },
-//           include: [
-//             {
-//               model: Retailer,
-//               as: "retailers",
-//               where: { is_active: 1 },
-//               required: false,
-//             },
-//           ],
-//         },
-//         {
-//           model: Wishlist,
-//           as: "wishlists",
-//           where: user_id ? { user_id } : {},
-//           required: false,
-//         },
-//       ],
-//     });
-
-//     if (!products.length) return [];
-//     const result = products.map((product) => {
-//       const p = product.get({ plain: true });
-//       const category = p.categories;
-//       const firstRetailer = category?.retailers?.[0] || null;
-
-//       const cost = parseFloat(p.sale_price) || 0;
-//       let addonPct = parseFloat(category?.addon_percentage) || 0;
-//       let discountPct = parseFloat(category?.discount_percentage) || 0;
-
-//       if (firstRetailer) {
-//         const selectedCats = firstRetailer.selected_categories || [];
-
-//         if (selectedCats.includes(Number(p.category_id))) {
-//           if (addonPct == 0)
-//             addonPct = parseFloat(firstRetailer.addon_percentage) || 0;
-//           if (discountPct == 0)
-//             discountPct = parseFloat(firstRetailer.discount) || 0;
-//         }
-//       }
-
-//       let finalPrice = cost;
-//       if (addonPct > 0 || discountPct > 0) {
-//         const markedPrice = cost + cost * (addonPct / 100);
-//         finalPrice = markedPrice - markedPrice * (discountPct / 100);
-//       }
-
-//       let formattedImages = [];
-//       try {
-//         formattedImages =
-//           typeof p.product_images === "string"
-//             ? JSON.parse(p.product_images)
-//             : p.product_images;
-//       } catch (e) {
-//         formattedImages = [];
-//       }
-
-//       return {
-//         ...p,
-//         discount_applied: `${discountPct}%`,
-//         category_name: category.name,
-//         sale_price: finalPrice > 0 ? finalPrice.toFixed(2) : cost.toFixed(2),
-//         product_images: formattedImages,
-//         is_fav: !!(p.wishlists && p.wishlists.length > 0),
-//         categories: undefined,
-//         wishlists: undefined,
-//       };
-//     });
-//     return product_id ? result[0] : result;
-//   } catch (error) {
-//     console.error("Error in getCalculatedProducts:", error);
-//     throw error;
-//   }
-// };
-
-// module.exports = { getCalculatedProducts };
-
 const { Op } = require("sequelize");
 const { Wishlist } = require("../modals/userWishlistModal");
 const Product = require("../modals/ProductModal/product");
@@ -109,24 +8,6 @@ const Color = require("../modals/ProductModal/color");
 const Size = require("../modals/ProductModal/size");
 const Brand = require("../modals/ProductModal/brand");
 const Cart = require("../modals/cartModal");
-
-// const formatValue = (obj) => {
-//   if (!obj || !obj.name) return obj;
-//   if (Array.isArray(obj.name)) return obj;
-//   let formattedNames;
-//   if (obj.name.includes("/")) {
-//     formattedNames = obj.name
-//       .split("/")
-//       .map((item) => item.trim())
-//       .filter(Boolean);
-//   } else {
-//     formattedNames = [obj.name.trim()];
-//   }
-//   return {
-//     ...obj,
-//     name: formattedNames,
-//   };
-// };
 
 const formatValue = (obj, isColor = false) => {
   if (!obj || !obj.name) return obj;
@@ -147,7 +28,6 @@ const formatValue = (obj, isColor = false) => {
     name: formattedNames,
   };
 
-  // Agar ye color hai, toh array ke har naam ka hex code nikal lo
   if (isColor) {
     result.hashcode = formattedNames.map((name) => getColorHex(name));
   }
@@ -178,7 +58,7 @@ const getColorHex = (dbColorName) => {
   return colorMap[primaryColor] || "#D3D3D3";
 };
 
-const getCalculatedProducts = async ({
+const getCalculatedProductsWithSuffling = async ({
   category_id,
   product_id,
   user_id = null,
@@ -197,40 +77,9 @@ const getCalculatedProducts = async ({
     }
     if (category_id) productWhere.category_id = category_id;
 
-    // const products = await Product.findAll({
-    //   where: productWhere,
-    //   include: [
-    //     {
-    //       model: Category,
-    //       as: "categories",
-    //       where: { is_active: 1 },
-    //       include: [
-    //         {
-    //           model: Retailer,
-    //           as: "retailers",
-    //           where: { is_active: 1 },
-    //           required: false,
-    //         },
-    //       ],
-    //     },
-    //     {
-    //       model: Retailer,
-    //       as: "retailers",
-    //       where: { is_active: 1 },
-    //       required: false,
-    //     },
-    //     {
-    //       model: Wishlist,
-    //       as: "wishlists",
-    //       where: user_id ? { user_id } : {},
-    //       required: false,
-    //     },
-    //   ],
-    // });
-
     const products = await Product.findAll({
       where: productWhere,
-      attributes: { exclude: ["createdAt", "updatedAt"] },
+      attributes: { exclude: ["createdAt", "updatedAt", "wholesale_cost"] },
       include: [
         {
           model: Category,
@@ -241,13 +90,9 @@ const getCalculatedProducts = async ({
             {
               model: Retailer,
               as: "retailers",
-              where: {
-                is_active: 1,
-              },
+              where: { is_active: 1 },
               required: false,
-              attributes: {
-                exclude: ["createdAt", "updatedAt"],
-              },
+              attributes: { exclude: ["createdAt", "updatedAt"] },
             },
           ],
         },
@@ -298,18 +143,20 @@ const getCalculatedProducts = async ({
         },
       ],
     });
+
     if (!products.length) return [];
     const firstProduct = JSON.parse(JSON.stringify(products));
     const firstRetailerData = firstProduct[0].retailers;
-    const result = products.map((product) => {
+
+    const calculatedList = products.map((product) => {
       const p = product.get({ plain: true });
       const category = p.categories;
       const productRetailer = p.retailers;
       const categoryRetailers = category?.retailers || [];
-      const firstRetailer = categoryRetailers[0] || null;
       const cost = parseFloat(p.sale_price) || 0;
       let addonPct = parseFloat(category?.addon_percentage) || 0;
       let discountPct = parseFloat(category?.discount_percentage) || 0;
+
       if (addonPct == 0 && discountPct == 0) {
         if (productRetailer) {
           let selectedCats = [];
@@ -331,12 +178,14 @@ const getCalculatedProducts = async ({
           discountPct = parseFloat(firstRetailerData.discount) || 0;
         }
       }
+
       let finalPrice = cost;
       let markedPrice = cost;
       if (addonPct > 0 || discountPct > 0) {
         markedPrice = cost + cost * (addonPct / 100);
         finalPrice = markedPrice - markedPrice * (discountPct / 100);
       }
+
       let formattedImages = [];
       try {
         formattedImages =
@@ -346,6 +195,7 @@ const getCalculatedProducts = async ({
       } catch (e) {
         formattedImages = [];
       }
+
       return {
         ...p,
         fabric: formatValue(p.fabric),
@@ -364,14 +214,94 @@ const getCalculatedProducts = async ({
         wishlists: undefined,
         cart: undefined,
         product_url: undefined,
+        msrp_price: undefined,
       };
     });
-    // return product_id ? result[0] : result;
-    return product_id && !Array.isArray(product_id) ? result[0] : result;
+    // --- SECTION 2: Grouping Logic (Optimized) ---
+    const groupedProductsMap = new Map();
+
+    calculatedList.forEach((prod) => {
+      const productNameKey = prod.product_name
+        ? prod.product_name.trim().toLowerCase()
+        : `unknown_${prod.id}`;
+
+      const formatSizeName = (sizeObj) => {
+        if (!sizeObj || !sizeObj.name) return "";
+        return Array.isArray(sizeObj.name) ? sizeObj.name[0] : sizeObj.name;
+      };
+
+      if (groupedProductsMap.has(productNameKey)) {
+        const existingProduct = groupedProductsMap.get(productNameKey);
+
+        if (prod.size) {
+          const sizeExists = existingProduct.sizes.some(
+            (s) => s.id === prod.size.id,
+          );
+          if (!sizeExists) {
+            existingProduct.sizes.push({
+              id: prod.size.id,
+              name: formatSizeName(prod.size),
+              product_id: prod.id, // Ye individual entry ki ID hai
+            });
+          }
+        }
+      } else {
+        // Naya entry create karte waqt structure fix karo
+        const newProductGroup = {
+          ...prod,
+          // Hum 'id' ko wahi rehne de rahe hain jo pehle product ki hai (Parent ID)
+          sizes: prod.size
+            ? [
+                {
+                  id: prod.size.id,
+                  name: formatSizeName(prod.size),
+                  product_id: prod.id,
+                },
+              ]
+            : [],
+        };
+        delete newProductGroup.size;
+        groupedProductsMap.set(productNameKey, newProductGroup);
+      }
+    });
+
+    let result = Array.from(groupedProductsMap.values());
+
+    // --- SECTION 3: Shuffling & Interleaving (Already Good) ---
+    if (result.length > 1 && (!product_id || Array.isArray(product_id))) {
+      const categoryBuckets = {};
+      result.forEach((product) => {
+        const catId = product.category_id || "uncategorized";
+        if (!categoryBuckets[catId]) categoryBuckets[catId] = [];
+        categoryBuckets[catId].push(product);
+      });
+
+      // Random shuffle each bucket
+      Object.keys(categoryBuckets).forEach((catId) => {
+        categoryBuckets[catId].sort(() => Math.random() - 0.5);
+      });
+
+      const mixedResult = [];
+      const bucketKeys = Object.keys(categoryBuckets);
+      let itemsRemaining = true;
+
+      while (itemsRemaining) {
+        itemsRemaining = false;
+        bucketKeys.forEach((catId) => {
+          if (categoryBuckets[catId].length > 0) {
+            mixedResult.push(categoryBuckets[catId].shift());
+            itemsRemaining = true;
+          }
+        });
+      }
+      result = mixedResult;
+    }
+
+    return result; // Final clean and interleaved list
   } catch (error) {
     console.error("Error in getCalculatedProducts:", error);
     throw error;
   }
 };
 
-module.exports = { getCalculatedProducts };
+module.exports = { getCalculatedProductsWithSuffling };

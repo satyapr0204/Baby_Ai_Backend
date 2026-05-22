@@ -114,13 +114,22 @@ const limiter = rateLimit({
 
 app.use("/", limiter);
 
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || "*",
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    credentials: true,
-  }),
-);
+// app.use(
+//   cors({
+//     origin: process.env.CLIENT_URL || "*",
+//     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+//     credentials: true,
+//   }),
+// );
+
+const corsOptions = {
+  origin: "*", // Ya fir aapka ngrok/frontend URL
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  credentials: true,
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
 
 // ==========================================
 // 2. PERFORMANCE & LOGGING
@@ -143,14 +152,25 @@ const staticOptions = {
   etag: true,
 };
 
+const staticOptionsImg = {
+  maxAge: "1d",
+  etag: true,
+  setHeaders: (res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  },
+};
+
+
+
 app.use(
   "/baby-image",
-  express.static(path.join(__dirname, "src/BabyProfileImage"), staticOptions),
+  express.static(path.join(__dirname, "src/BabyProfileImage"), staticOptionsImg),
 );
 
 app.use(
   "/banners",
-  express.static(path.join(__dirname, "src/Banners"), staticOptions),
+  express.static(path.join(__dirname, "src/Banners"), staticOptionsImg),
 );
 
 app.use("/admin", adminRoutes);

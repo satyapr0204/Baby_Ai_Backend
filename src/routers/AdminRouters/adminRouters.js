@@ -38,6 +38,9 @@ const {
   getAllTransactions,
   resetRetailorPrice,
   previewMessage,
+  fetchAllPlans,
+  createNewPlane,
+  updatePlan,
 } = require("../../controllers/AdminControllers/controllers");
 
 const { authenticateToken } = require("../../middleware/authMiddleware");
@@ -102,11 +105,7 @@ adminRouter.get(
   fetchAllFlashMessages,
 );
 
-adminRouter.post(
-  "/preview-messages",
-  authenticateToken,
-  previewMessage,
-);
+adminRouter.post("/preview-messages", authenticateToken, previewMessage);
 
 adminRouter.post(
   "/add-min-max-time-count",
@@ -257,5 +256,21 @@ adminRouter.get("/orders", authenticateToken, getAllOrderData);
 adminRouter.get("/transactions", authenticateToken, getAllTransactions);
 
 adminRouter.get("/get-data", getAllData);
+
+adminRouter.get("/all-plans", authenticateToken, fetchAllPlans);
+
+adminRouter.post(
+  "/create-plan",
+  authenticateToken,
+  validateBody(["plan_name", "duraction", "price", "features"]),
+  createNewPlane,
+);
+
+adminRouter.post(
+  "/update-plan",
+  authenticateToken,
+  validateBody(["id"]),
+  updatePlan,
+);
 
 module.exports = adminRouter;

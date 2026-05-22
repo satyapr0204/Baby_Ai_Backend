@@ -24,6 +24,7 @@
     "cookie": "^1.1.1",
     "cookie-signature": "^1.2.2",
     "cors": "^2.8.6",
+    "country-state-city": "^3.2.1",
     "crypto": "^1.0.1",
     "csv-parser": "^3.2.0",
     "debug": "^4.4.3",
@@ -70,6 +71,7 @@
     "mysql2": "^3.19.0",
     "negotiator": "^1.0.0",
     "node-cron": "^4.2.1",
+    "node-fetch": "^3.3.2",
     "nodemailer": "^8.0.4",
     "on-finished": "^2.4.1",
     "once": "^1.4.0",
@@ -98,6 +100,7 @@
     "unpipe": "^1.0.0",
     "vary": "^1.1.2",
     "wrappy": "^1.0.2",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "xml2js": "^0.6.2"
   }
 }

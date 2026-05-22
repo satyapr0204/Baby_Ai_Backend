@@ -47,7 +47,15 @@ const {
   getAllOrders,
   fetchOrderDetails,
   cancelMyOrder,
+  getAllCountryCode,
+  getAllStateCode,
+  allProduct,
+  getRecommendedProduct,
+  generateBabyTryOn,
 } = require("../../controllers/UserControllers/controllers");
+const {
+  getRecommendedSize,
+} = require("../../controllers/AiControllers/sizeController");
 const { authenticateToken } = require("../../middleware/authMiddleware");
 const validateBody = require("../../middleware/validator");
 const multer = require("multer");
@@ -197,9 +205,11 @@ userRouter.post(
     "street_address",
     "city",
     "state",
-    "zip_code",
     "lat",
     "long",
+    "post_code",
+    "country_id",
+    "state_id",
   ]),
   addNewUserAddress,
 );
@@ -209,16 +219,7 @@ userRouter.get("/saved-address", authenticateToken, allSavedAddress);
 userRouter.post(
   "/update-address",
   authenticateToken,
-  validateBody([
-    "id",
-    "address_type",
-    "street_address",
-    "city",
-    "state",
-    "zip_code",
-    "lat",
-    "long",
-  ]),
+  validateBody(["id"]),
   updateUserAddress,
 );
 
@@ -273,7 +274,12 @@ userRouter.get("/filter-data", authenticateToken, allFilterData);
 
 userRouter.post("/filter", authenticateToken, applayFilters);
 
-userRouter.post("/select-baby-profile", authenticateToken, selectBabyProfile);
+userRouter.post(
+  "/select-baby-profile",
+  authenticateToken,
+  validateBody(["id"]),
+  selectBabyProfile,
+);
 
 // For static pages
 userRouter.get("/faqs", authenticateToken, getFaqs);
@@ -313,7 +319,7 @@ userRouter.post(
 userRouter.post(
   "/place-order",
   authenticateToken,
-  validateBody(["id", "shipping_address"]),
+  validateBody(["id", "shipping_address_id"]),
   // createPaymentIntent,
   createCheckoutSession,
   // placeOrder,
@@ -345,5 +351,22 @@ userRouter.post(
   validateBody(["sessionId"]),
   verifyPayment,
 );
+
+userRouter.get("/all-country-code", authenticateToken, getAllCountryCode);
+
+userRouter.post("/state-code", authenticateToken, getAllStateCode);
+
+// Ai Servicess
+// userRouter.post("/predict-size", authenticateToken, getRecommendedSize);
+userRouter.post(
+  "/predict-size",
+  authenticateToken,
+  validateBody(["landmarks", "image_height", "image_width"]),
+  getRecommendedProduct,
+);
+
+userRouter.get("/all-product", allProduct);
+
+userRouter.post("/try-on", generateBabyTryOn);
 
 module.exports = userRouter;

@@ -32,6 +32,4 @@ const sendOtpOnEmail = async (mailOptions, retries = 3) => {
     await sendEmail(mailOptions, retries);
 };
 
-
-
 module.exports = { sendOtpOnEmail }

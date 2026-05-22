@@ -1,162 +1,87 @@
-[
-    {
-        "category_id": "1",
-        "category_name": "Rompers",
-        "retailer_count": 67,
-        "total_products": 53,
-        "pricing": 400.00,
-        "category_image": "https://example.com/images/categories/rompers.png"
-    },
-    {
-        "category_id": "2",
-        "category_name": "Onesies",
-        "retailer_count": 45,
-        "total_products": 43,
-        "pricing": 400.00,
-        "category_image": "https://example.com/images/categories/onesies.png"
-    },
-    {
-        "category_id": "3",
-        "category_name": "Bodysuits",
-        "retailer_count": 72,
-        "total_products": 35,
-        "pricing": 400.00,
-        "category_image": "https://example.com/images/categories/bodysuits.png"
-    },
-    {
-        "category_id": "4",
-        "category_name": "Nightwear",
-        "retailer_count": 41,
-        "total_products": 45,
-        "pricing": 400.00,
-        "category_image": "https://example.com/images/categories/nightwear.png"
-    },
-    {
-        "category_id": "5",
-        "category_name": "T-Shirts",
-        "retailer_count": 46,
-        "total_products": 96,
-        "pricing": 400.00,
-        "category_image": "https://example.com/images/categories/tshirts.png"
-    },
-    {
-        "category_id": "6",
-        "category_name": "Sweaters",
-        "retailer_count": 69,
-        "total_products": 15,
-        "pricing": 400.00,
-        "category_image": "https://example.com/images/categories/sweaters.png"
-    },
-    {
-        "category_id": "7",
-        "category_name": "Dresses",
-        "retailer_count": 54,
-        "total_products": 85,
-        "pricing": 400.00,
-        "category_image": "https://example.com/images/categories/dresses.png"
-    },
-    {
-        "category_id": "8",
-        "category_name": "Party Wear",
-        "retailer_count": 85,
-        "total_products": 12,
-        "pricing": 400.00,
-        "category_image": "https://example.com/images/categories/party-wear.png"
-    },
-    {
-        "category_id": "9",
-        "category_name": "Jackets",
-        "retailer_count": 30,
-        "total_products": 28,
-        "pricing": 550.00,
-        "category_image": "https://example.com/images/categories/jackets.png"
-    },
-    {
-        "category_id": "10",
-        "category_name": "Pants & Shorts",
-        "retailer_count": 55,
-        "total_products": 64,
-        "pricing": 320.00,
-        "category_image": "https://example.com/images/categories/pants-shorts.png"
-    },
-    {
-        "category_id": "11",
-        "category_name": "Footwear",
-        "retailer_count": 22,
-        "total_products": 40,
-        "pricing": 600.00,
-        "category_image": "https://example.com/images/categories/footwear.png"
-    },
-    {
-        "category_id": "12",
-        "category_name": "Accessories",
-        "retailer_count": 94,
-        "total_products": 120,
-        "pricing": 150.00,
-        "category_image": "https://example.com/images/categories/accessories.png"
-    },
-    {
-        "category_id": "13",
-        "category_name": "Raincoats",
-        "retailer_count": 12,
-        "total_products": 8,
-        "pricing": 450.00,
-        "category_image": "https://example.com/images/categories/raincoats.png"
-    },
-    {
-        "category_id": "14",
-        "category_name": "Swimwear",
-        "retailer_count": 18,
-        "total_products": 22,
-        "pricing": 300.00,
-        "category_image": "https://example.com/images/categories/swimwear.png"
-    },
-    {
-        "category_id": "15",
-        "category_name": "Winter Suits",
-        "retailer_count": 49,
-        "total_products": 31,
-        "pricing": 800.00,
-        "category_image": "https://example.com/images/categories/winter-suits.png"
-    },
-    {
-        "category_id": "16",
-        "category_name": "Hoodies",
-        "retailer_count": 37,
-        "total_products": 50,
-        "pricing": 450.00,
-        "category_image": "https://example.com/images/categories/hoodies.png"
-    },
-    {
-        "category_id": "17",
-        "category_name": "Ethnic Wear",
-        "retailer_count": 25,
-        "total_products": 18,
-        "pricing": 900.00,
-        "category_image": "https://example.com/images/categories/ethnic-wear.png"
-    },
-    {
-        "category_id": "18",
-        "category_name": "Bibs & Burp Cloths",
-        "retailer_count": 88,
-        "total_products": 150,
-        "pricing": 50.00,
-        "category_image": "https://example.com/images/categories/bibs.png"
-    },
-    {
-        "category_id": "19",
-        "category_name": "Tracksuits",
-        "retailer_count": 42,
-        "total_products": 24,
-        "pricing": 700.00,
-        "category_image": "https://example.com/images/categories/tracksuits.png"
-    },
-    {
-        "category_id": "20",
-        "category_name": "Sleeping Bags",
-        "retailer_count": 15,
-        "total_products": 10,
-        "pricing": 350.00,
-        "category_image": "https://example.com/images/categories/sleeping-bags.png"
+Orders {
+  dataValues: {
+    id: 66,
+    order_id: 'ORD-1779175566581',
+    items: '[
+            {
+                "product_id": 25,
+                "product_name": "White Short Sleeve One Piece 3 Pack",
+                "quantity": 10,
+                "price": "14.03",
+                "subtotal": 140.29999999999998
+            },
+            {
+                "product_id": 21,
+                "product_name": "White Interlock Short Sleeve Onezies",
+                "quantity": 1,
+                "price": "12.09",
+                "subtotal": 12.09
+            },
+            {
+                "product_id": 15,
+                "product_name": "Navy Interlock Short Sleeve Bodysuit Onezies",
+                "quantity": 8,
+                "price": "12.09",
+                "subtotal": 96.72
+            }
+        ]',
+    quantity: 19,
+    total_amount: 249.11,
+    shipping_address: '[Home
+        ] Gali no 40 ak collection, Vidya vihar, New Ashok nagar, New Delhi, IN - 110096',
+    payment_method: 'card',
+    order_status: 'Placed',
+    is_returned: 0,
+    is_cancelled: 0,
+    reason: null,
+    order_date: 2026-05-19T07: 26: 06.000Z,
+    delivery_date: null,
+    retailer_status: null,
+    retailer_error_log: null,
+    retailer_order_id: null,
+    createdAt: 2026-05-19T07: 26: 06.000Z,
+    updatedAt: 2026-05-19T07: 27: 01.000Z,
+    user_id: 1,
+    shippingAddress_id: 6,
     }
-]
+}
+  order_address: User_Address {
+    dataValues: {
+    id: 6,
+    address_type: 'Home',
+    street_address: 'Gali no 40 ak collection',
+    apartment: 'Vidya vihar',
+    city: 'New Ashok nagar',
+    state: 'New Delhi',
+    state_id: 'BR',
+    country_id: 'IN',
+    post_code: '110096',
+    is_active: 1,
+    is_delete: 0,
+    is_default: 1,
+    lat: '105.599545',
+    long: '126.698545',
+    user_id: 1
+    },
+}
+userData User {
+    dataValues: {
+    id: 1,
+    email: 'lion@yopmail.com',
+    phone: null,
+    profile_image: null,
+    is_profile_complete: 0,
+    is_new_user: 1,
+    name: 'Thomus',
+    orders: 10,
+    is_active: 1,
+    is_delete: 0,
+    current_step: 1,
+    selected_baby: 0,
+    country_code: null,
+    fcm_token: 'abcxyz',
+    createdAt: 2026-05-08T09: 52: 43.000Z,
+    updatedAt: 2026-05-14T06: 50: 33.000Z,
+    active_plan_id: null
+    },
+}

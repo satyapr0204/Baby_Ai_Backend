@@ -25,7 +25,13 @@ const Address = sequelize.define(
     state: {
       type: DataTypes.STRING,
     },
-    zip_code: {
+    state_id: {
+      type: DataTypes.STRING,
+    },
+    country_id: {
+      type: DataTypes.STRING,
+    },
+    post_code: {
       type: DataTypes.STRING,
     },
     is_active: {

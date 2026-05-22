@@ -22,6 +22,7 @@ const { calculateSafeMargin } = require("../../utils/calculatePricing");
 const Retailer = require("../../modals/ProductModal/retailer");
 const Fabric = require("../../modals/ProductModal/fabric");
 const Color = require("../../modals/ProductModal/color");
+const Plan = require("../../modals/planModal");
 // const ExcelJS = require('exceljs');
 
 // const processBabyData = async (data) => {
@@ -265,6 +266,7 @@ const updateGlobalStatus = async (req, res, next) => {
       category: Category,
       flash_message: FlashMessage,
       retailer: Retailer,
+      plan: Plan,
     };
     const TargetModel = modelMap[type];
     if (!TargetModel) throw new CoustomError(`Invalid type: '${type}'`, 400);
@@ -385,12 +387,13 @@ const globleFlashMessageEnable = async (req, res, next) => {
 const globleFlashEnableStatus = async (req, res, next) => {
   try {
     const config = await FlashMessageEnable.findByPk(1);
+    console.log("config", config);
     sendResponse(
       res,
       "Flash message enable status retrieved successfully!",
       200,
       {
-        is_enabled: config.is_enabled,
+        is_enabled: config.is_enabled ? config.is_enabled : 0,
       },
     );
   } catch (error) {
@@ -1810,63 +1813,92 @@ const getAllData = async (req, res, next) => {
   }
 };
 
-// const getAllData = async (req, res, next) => {
-//   try {
-//     // 1. Database se data fetch karein
-//     const allProducts = await Product.findAll({
-//       where: {
-//         sale_price: 0,
-//       },
-//     });
+const fetchAllPlans = async (req, res, next) => {
+  try {
+    const allPlans = await Plan.findAll({
+      // where: {
+      //   // is_active: 1,
+      // },
+    });
+    const formattedPlans = allPlans.map((plan) => {
+      const planData = plan.get({ plain: true });
+      let rawFeatures = planData.features;
 
-//     // 2. Naya Excel Workbook aur Worksheet banayein
-//     const workbook = new ExcelJS.Workbook();
-//     const worksheet = workbook.addWorksheet('Products');
+      if (typeof rawFeatures === "string") {
+        try {
+          let cleaned = rawFeatures.trim();
+          if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+            cleaned = cleaned.substring(1, cleaned.length - 1);
+          }
+          cleaned = cleaned.replace(/\\"/g, '"');
+          if (cleaned.includes("'")) {
+            cleaned = cleaned.replace(/'/g, '"');
+          }
 
-//     // 3. Columns define karein (header setup)
-//     worksheet.columns = [
-//       { header: 'ID', key: 'id', width: 10 },
-//       { header: 'Product Name', key: 'product_name', width: 30 },
-//       { header: 'Msrp Price', key: 'msrp_price', width: 15 },
-//       { header: 'Sale Price', key: 'sale_price', width: 15 },
-//       { header: 'Wholesale Cost', key: 'wholesale_cost', width: 15 },
-//       { header: 'Product Images', key: 'product_images', width: 15 },
-//       { header: 'Best Seller', key: 'is_best_seller', width: 15 },
-//       { header: 'Retailer Id', key: 'retailer_id', width: 15 },
-//       { header: 'Created At', key: 'createdAt', width: 20 },
-//     ];
-//     // 4. Workbook mein database ka data add karein
-//     allProducts.forEach((product) => {
-//       worksheet.addRow({
-//         id: product.id,
-//         product_name: product.product_name,
-//         msrp_price: product.msrp_price,
-//         sale_price: product.sale_price,
-//         wholesale_cost: product.wholesale_cost,
-//         product_images: product.product_images,
-//         is_best_seller: product.is_best_seller,
-//         retailer_id: product.retailer_id,
-//         createdAt: product.createdAt,
-//       });
-//     });
+          rawFeatures = JSON.parse(cleaned);
+        } catch (e) {
+          console.error("Parsing error for ID:", planData.id, e.message);
+          rawFeatures =
+            rawFeatures
+              .match(/'([^']+)'|"([^"]+)"/g)
+              ?.map((s) => s.slice(1, -1)) || [];
+        }
+      }
 
-//     // 5. Response Headers set karein taaki browser ise download kare
-//     res.setHeader(
-//       'Content-Type',
-//       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-//     );
-//     res.setHeader(
-//       'Content-Disposition',
-//       'attachment; filename=' + 'products_report.xlsx'
-//     );
+      return {
+        ...planData,
+        features: Array.isArray(rawFeatures) ? rawFeatures : [],
+      };
+    });
+    sendResponse(res, "Fetching all the plans", 200, {
+      allPlans: formattedPlans,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
-//     await workbook.xlsx.write(res);
-//     res.end();
+const createNewPlane = async (req, res, next) => {
+  try {
+    const { plan_name, duraction, price, features } = req.body;
+    await Plan.create({
+      plan_name,
+      duraction,
+      price,
+      features,
+    });
 
-//   } catch (error) {
-//     next(error);
-//   }
-// };
+    sendResponse(res, "Plan has been created successfully", 201);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updatePlan = async (req, res, next) => {
+  try {
+    const { id, plan_name, price, features, is_active } = req.body;
+
+    const isExitsPlan = await Plan.findOne({
+      where: {
+        id,
+        // is_active: 1,
+      },
+    });
+    if (!isExitsPlan) throw new CoustomError("Plan isn't avilible", 400);
+
+    await isExitsPlan.update({
+      plan_name: plan_name ? plan_name : isExitsPlan.plan_name,
+      // duraction: duraction ? duraction : isExitsPlan.duraction,
+      price: price ? price : isExitsPlan.price,
+      features: features ? features : isExitsPlan.features,
+      is_active: is_active ? is_active : isExitsPlan.is_active,
+    });
+
+    sendResponse(res, "Your plan has been updated successfully", 200);
+  } catch (error) {
+    next(error);
+  }
+};
 
 module.exports = {
   processBabyData,
@@ -1905,4 +1937,7 @@ module.exports = {
   getAllData,
   getAllOrderData,
   getAllTransactions,
+  fetchAllPlans,
+  createNewPlane,
+  updatePlan,
 };

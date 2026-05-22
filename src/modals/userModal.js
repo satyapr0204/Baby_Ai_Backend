@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../../dbConfig.js");
+const Plan = require("./planModal.js");
 
 const User = sequelize.define(
   "User",
@@ -11,7 +12,7 @@ const User = sequelize.define(
     },
     email: {
       type: DataTypes.STRING,
-    //   allowNull: false,
+      //   allowNull: false,
     },
     phone: {
       type: DataTypes.STRING,
@@ -63,6 +64,20 @@ const User = sequelize.define(
     timestamps: true,
   },
 );
+
+User.belongsTo(Plan, {
+  foreignKey: "active_plan_id",
+  as: "subscriber",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+Plan.hasMany(User, {
+  foreignKey: "active_plan_id",
+  as: "subscriber",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
 
 // (async () => {
 //     try {

@@ -1,3 +1,5 @@
+const FASHN_API_KEY = process.env.FASHN_API_KEY;
+const FASHN_BASE_URL = process.env.FASHN_AI_BASE_URL;
 const User = require("../../modals/userModal");
 const fs = require("fs").promises;
 const CoustomError = require("../../utils/CoustomError");
@@ -29,6 +31,12 @@ const StaticPage = require("../../modals/staticPageModal");
 const Order = require("../../modals/orderModal");
 const Transaction = require("../../modals/transactionModal");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const { Country, State } = require("country-state-city");
+const { formatFullAddress } = require("../../utils/getFullAddress");
+const { createOrder } = require("../../utils/bambiniService");
+const {
+  getCalculatedProductsWithSuffling,
+} = require("../../utils/calclutePricewithSuffaling");
 
 const genrateOtpAndToken = async (input, name, channel, country_code) => {
   const otp = crypto.randomInt(10000, 99999).toString();
@@ -79,14 +87,6 @@ const ensureHttps = (data) => {
   }
   return getProxyUrl(data);
 };
-
-// const ensureHttps = (data) => {
-//   if (!data) return data;
-//   if (Array.isArray(data)) {
-//     return data.map((url) => url.replace(/^http:\/\//i, "http://"));
-//   }
-//   return data.replace(/^http:\/\//i, "http://");
-// };
 
 const sendOtpForLogin = async (req, res, next) => {
   try {
@@ -153,7 +153,7 @@ const verifyOtp = async (req, res, next) => {
     let user;
     const whereCondition =
       decoded.channel === "email"
-        ? { email: input, is_delete: 0 }
+        ? { email: input.toLowerCase(), is_delete: 0 }
         : { phone: input, is_delete: 0, country_code: decoded.country_code };
 
     user = await User.findOne({ where: whereCondition });
@@ -277,7 +277,7 @@ const verifyPhoneEmailForUpdate = async (req, res, next) => {
     if (!user) throw new CoustomError(`User not found.`, 404);
     const updateData =
       decoded.channel === "email"
-        ? { email: input }
+        ? { email: input.toLowerCase() }
         : { phone: input, country_code: country_code };
     await user.update(updateData);
 
@@ -446,6 +446,7 @@ const updateBabyProfileWithStep = async (req, res, next) => {
       baby_gender,
       fabric_preferences,
       preferred_colors,
+      user_name,
     } = req.body;
 
     let baby_profile_image;
@@ -460,8 +461,15 @@ const updateBabyProfileWithStep = async (req, res, next) => {
     let newBaby;
     if (!step && id) {
       const babyDataWithUser = await BabyProfile.findOne({
-        id,
-        user_id,
+        where: {
+          id,
+          user_id,
+        },
+      });
+      const userData = await User.findOne({
+        where: {
+          id: user_id,
+        },
       });
 
       if (babyDataWithUser) {
@@ -484,12 +492,12 @@ const updateBabyProfileWithStep = async (req, res, next) => {
           baby_gender: baby_gender ? baby_gender : babyDataWithUser.baby_gender,
 
           fabric_preferences:
-            parsedFabrics.length >= 0
+            parsedFabrics && parsedFabrics.length >= 0
               ? parsedFabrics
               : babyDataWithUser.fabric_preferences,
 
           preferred_colors:
-            parsedColors.length >= 0
+            parsedColors && parsedColors.length >= 0
               ? parsedColors
               : babyDataWithUser.preferred_colors,
 
@@ -497,6 +505,11 @@ const updateBabyProfileWithStep = async (req, res, next) => {
             ? baby_profile_image
             : babyDataWithUser.baby_profile_image,
         });
+
+        await userData.update({
+          name: user_name ? user_name : userData.name,
+        });
+
         return sendResponse(
           res,
           "Baby profile has been updated succesfully",
@@ -854,19 +867,19 @@ const allWishlistData = async (req, res, next) => {
       };
     });
 
-    const finalData = {
-      count: wishlistEntries.count,
-      rows: formattedRows,
-    };
+    // const finalData = {
+    //   count: wishlistEntries.count,
+    //   rows: formattedRows,
+    // };
 
-    const formattedResponse = getPagingData(finalData, page, limit);
+    // const formattedResponse = getPagingData(finalData, page, limit);
 
-    console.log("formattedResponse", formattedResponse);
+    // console.log("formattedResponse", formattedResponse);
     sendResponse(
       res,
       "Wishlist fetched successfully with updated prices",
       200,
-      formattedResponse,
+      { items: formattedRows },
     );
   } catch (error) {
     next(error);
@@ -1257,6 +1270,10 @@ const productCategoryWiseData = async (req, res, next) => {
     //   };
     // });
 
+    // const products = await getCalculatedProductsWithSuffling({
+    //   category_id,
+    //   user_id: user_id,
+    // });
     const products = await getCalculatedProducts({
       category_id,
       user_id: user_id,
@@ -1492,10 +1509,12 @@ const addNewUserAddress = async (req, res, next) => {
       street_address,
       city,
       state,
-      zip_code,
       lat,
       long,
       apartment,
+      post_code,
+      country_id,
+      state_id,
     } = req.body;
 
     const isAnyAddress = await Address.findAll({
@@ -1516,11 +1535,13 @@ const addNewUserAddress = async (req, res, next) => {
       street_address,
       city,
       state,
-      zip_code,
+      post_code,
       lat,
       long,
       apartment,
       is_default,
+      country_id,
+      state_id,
     });
 
     sendResponse(res, "Address added successfully", 200);
@@ -1547,16 +1568,19 @@ const allSavedAddress = async (req, res, next) => {
 const updateUserAddress = async (req, res, next) => {
   try {
     const user_id = req.user.id;
+    console.log("reqBody", req.body);
     const {
       id,
       address_type,
       street_address,
       city,
       state,
-      zip_code,
+      post_code,
       lat,
       long,
       apartment,
+      state_id,
+      country_id,
     } = req.body;
 
     const isAddress = await Address.findOne({
@@ -1575,10 +1599,12 @@ const updateUserAddress = async (req, res, next) => {
         : isAddress.street_address,
       city: city ? city : isAddress.city,
       state: state ? state : isAddress.state,
-      zip_code: zip_code ? zip_code : isAddress.zip_code,
+      post_code: post_code ? post_code : isAddress.post_code,
       lat: lat ? lat : isAddress.lat,
       long: long ? long : isAddress.long,
       apartment: apartment ? apartment : isAddress.apartment,
+      state_id: state_id ? state_id : isAddress.state_id,
+      country_id: country_id ? country_id : isAddress.country_id,
     });
 
     sendResponse(res, "Your address has been updated", 200, isAddress);
@@ -1756,47 +1782,6 @@ const updatedQuantityInCart = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const { id, quantity } = req.body;
-    // const cartItem = await Cart.findOne({
-    //   where: { user_id, id },
-    // });
-    // if (!cartItem) throw new CoustomError("Cart item not found", 404);
-    // const productData = await Product.findOne({
-    //   where: {
-    //     id,
-    //   },
-    // });
-    // if (!productData) throw new CoustomError("Product not found", 404);
-
-    // const productDetails = await getCalculatedProducts({
-    //   product_id: id,
-    //   user_id: user_id,
-    // });
-
-    // const updatedQuantity = cartItem.quantity + quantity;
-
-    // if (updatedQuantity > 10) {
-    //   throw new CoustomError(
-    //     "You cannot add more than 10 units of this product",
-    //     400,
-    //   );
-    // }
-    // if (updatedQuantity <= 0) {
-    //   await existingCartItem.destroy();
-    //   return sendResponse(res, "Product removed from cart successfully", 200);
-    // }
-
-    // cartItem.quantity = updatedQuantity;
-    // cartItem.total_price = updatedQuantity * productDetails.sale_price;
-    // await cartItem.save();
-
-    // const plainCartItem = cartItem.get({ plain: true });
-    // let resData = {
-    //   ...plainCartItem,
-    //   total_price: parseFloat(plainCartItem.total_price).toFixed(2),
-    //   actual_total_price: parseFloat(plainCartItem.actual_total_price).toFixed(
-    //     2,
-    //   ),
-    // };
 
     if (quantity < 1 || quantity > 10) {
       throw new CoustomError("Quantity must be between 1 and 10", 400);
@@ -1818,10 +1803,8 @@ const updatedQuantityInCart = async (req, res, next) => {
     cartItem.quantity = quantity;
     const salePrice = parseFloat(productDetails.sale_price) || 0;
     const actualPrice = parseFloat(productDetails.actual_price) || 0;
-
     cartItem.total_price = (quantity * salePrice).toFixed(2);
     cartItem.actual_total_price = (quantity * actualPrice).toFixed(2);
-
     await cartItem.save();
     const plainCartItem = cartItem.get({ plain: true });
 
@@ -1931,7 +1914,6 @@ const fetchAllCartItems = async (req, res, next) => {
 
     const cartItemsWithDetails = cartItems.map((item) => {
       const details = productMap.get(item.product_id.toString()) || null;
-
       const finalSalePrice = details ? parseFloat(details.sale_price) || 0 : 0;
       const finalActualPrice = details
         ? parseFloat(details.actual_price) || 0
@@ -1969,6 +1951,7 @@ const fetchAllOrderedItems = async (req, res, next) => {
       exclude: ["createdAt", "updatedAt", "user_id", "order_date"],
       raw: true,
     });
+    console.log("orders", orders);
     let allProductIds = [];
     let categories = [];
     orders.forEach((order) => {
@@ -2031,6 +2014,7 @@ const fetchAllOrderedItems = async (req, res, next) => {
         total_amount: `${order.total_amount}`,
         products_name: items[0].product_name,
         product_images: formattedImages,
+        product_id: items[0].product_id,
       };
     });
     sendResponse(res, "Ordered items fetched successfully", 200, {
@@ -2044,8 +2028,9 @@ const fetchAllOrderedItems = async (req, res, next) => {
 
 const allFilterData = async (req, res, next) => {
   try {
-    const [brands, colorsData, genders, sizes, febrics] = await Promise.all([
-      Brand.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
+    // const [brands, colorsData, genders, sizes, febrics] = await Promise.all([
+    const [colorsData, genders, sizes, febrics] = await Promise.all([
+      // Brand.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
       Color.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
       Gender.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
       Size.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
@@ -2087,11 +2072,11 @@ const allFilterData = async (req, res, next) => {
         filter_name: "Price",
         options: priceOptions,
       },
-      {
-        filter_key: "brand",
-        filter_name: "Brand",
-        options: brands,
-      },
+      // {
+      //   filter_key: "brand",
+      //   filter_name: "Brand",
+      //   options: brands,
+      // },
       {
         filter_key: "gender",
         filter_name: "Gender",
@@ -2123,10 +2108,11 @@ const allFilterData = async (req, res, next) => {
 const applayFilters = async (req, res, next) => {
   try {
     const user_id = req.user.id;
-    const { price, brand, gender, color, size, fabric, category_id } = req.body;
+    // const { price, brand, gender, color, size, fabric, category_id } = req.body;
+    const { price, gender, color, size, fabric, category_id } = req.body;
     let productWhere = { sale_price: { [Op.gt]: 0 } };
     if (category_id) productWhere.category_id = category_id;
-    if (brand?.length) productWhere.brand_id = { [Op.in]: brand };
+    // if (brand?.length) productWhere.brand_id = { [Op.in]: brand };
     if (gender?.length) productWhere.gender_id = { [Op.in]: gender };
     if (color?.length) productWhere.color_id = { [Op.in]: color };
     if (size?.length) productWhere.size_id = { [Op.in]: size };
@@ -2164,10 +2150,10 @@ const applayFilters = async (req, res, next) => {
 const selectBabyProfile = async (req, res, next) => {
   try {
     const user_id = req.user.id;
-    const { baby_profile_id } = req.body;
+    const { id } = req.body;
     const babyProfile = await BabyProfile.findOne({
       where: {
-        id: baby_profile_id,
+        id: id,
         user_id,
       },
     });
@@ -2183,7 +2169,7 @@ const selectBabyProfile = async (req, res, next) => {
     });
     if (useExist) {
       await useExist.update({
-        selected_baby: baby_profile_id,
+        selected_baby: id,
       });
     }
 
@@ -2277,6 +2263,7 @@ const staticPageDetails = async (req, res, next) => {
       },
       attributes: ["id", "title", "content"],
     });
+    console.log("id", id);
     if (!staticPage) {
       throw new CoustomError("Page not found", 404);
     }
@@ -2418,7 +2405,7 @@ const createPaymentIntent = async (req, res, next) => {
 
 const createCheckoutSession = async (req, res, next) => {
   try {
-    const { id, shipping_address } = req.body;
+    const { id, shipping_address_id } = req.body;
     const userId = req.user.id;
 
     const cartItems = await Cart.findAll({
@@ -2456,15 +2443,26 @@ const createCheckoutSession = async (req, res, next) => {
     );
     const totalAmount = itemsList.reduce((sum, item) => sum + item.subtotal, 0);
 
+    const addressData = await Address.findOne({
+      where: {
+        id: shipping_address_id,
+        is_delete: 0,
+      },
+      raw: true,
+    });
+
+    const fullAddressText = formatFullAddress(addressData);
+
     const newOrder = await Order.create({
       user_id: userId,
       order_id: `ORD-${Date.now()}`,
       items: itemsList,
       quantity: totalOrderQty,
       total_amount: totalAmount,
-      shipping_address: shipping_address,
+      shipping_address: fullAddressText,
       order_status: "Pending",
       order_date: new Date(),
+      shippingAddress_id: addressData.id,
     });
 
     // console.log("itemsList", itemsList);
@@ -2472,7 +2470,6 @@ const createCheckoutSession = async (req, res, next) => {
       return {
         price_data: {
           currency: "USD",
-          // currency: "INR",
           product_data: {
             name: item.product_name,
           },
@@ -2486,16 +2483,13 @@ const createCheckoutSession = async (req, res, next) => {
       line_items: line_items,
       mode: "payment",
       invoice_creation: { enabled: true },
-      // success_url: `http://localhost:5173/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      // cancel_url: `http://localhost:5173/payment-cancelled`,
       success_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      // cancel_url: `https://mern.yilstaging.com/payment-cancelled`,
       cancel_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
       metadata: {
         order_id: newOrder.id,
         cart_id: JSON.stringify(id),
         user_id: userId,
-        shipping_address: JSON.stringify(shipping_address),
+        shipping_address: JSON.stringify(fullAddressText),
       },
     });
 
@@ -2586,6 +2580,36 @@ const verifyPayment = async (req, res, next) => {
         await Cart.destroy({ where: { id: cartIds, user_id: userId } });
       }
 
+      try {
+        const bambiniResponse = await createOrder(orderId, userData);
+
+        if (bambiniResponse.status) {
+          await order.update({
+            retailer_order_id: bambiniResponse.order_id,
+            retailer_status: "Success",
+          });
+          console.log("Bambini Order Placed:", bambiniResponse.order_id);
+        } else {
+          await order.update({
+            retailer_status: "Failed",
+            retailer_error_log: JSON.stringify(
+              bambiniResponse.errors || bambiniResponse.message,
+            ),
+          });
+
+          console.error(
+            "Bambini Rejected Order but Payment is Done:",
+            bambiniResponse.errors,
+          );
+        }
+      } catch (bambiniErr) {
+        await order.update({
+          retailer_status: "Failed",
+          retailer_error_log: bambiniErr.message,
+        });
+        console.error("Bambini API Error:", bambiniErr);
+      }
+
       return sendResponse(res, "Order placed successfully", 200, {
         orderId: order.order_id,
       });
@@ -2665,60 +2689,162 @@ const generateAvatar = async (req, res, next) => {
   }
 };
 
+// const buyAgain = async (req, res, next) => {
+//   try {
+//     const user_id = req.user.id;
+//     const id = req.body.id;
+//     const type = req.body.type;
+
+//     let orderData;
+//     if (type == "order") {
+//       orderData = await Order.findOne({
+//         where: {
+//           id: id,
+//           user_id: user_id,
+//           order_status: "Placed",
+//         },
+//         include: [
+//           {
+//             model: Address,
+//             as: "order_address",
+//             attributes: { exclude: ["createdAt", "updatedAt"] },
+//           },
+//         ],
+//       });
+//     }
+
+//     if (!orderData) {
+//       throw new CoustomError("Order not found or cannot be reordered", 404);
+//     }
+
+//     const address = await Address.findOne({
+//       where: {
+//         is_default: 1,
+//       },
+//     });
+
+//     const fullAddressText = formatFullAddress(
+//       orderData.order_address || address,
+//     );
+//     const items =
+//       (orderData ?? typeof orderData.items === "string")
+//         ? JSON.parse(orderData.items)
+//         : orderData.items;
+
+//     const productIds = items.map((item) => item.product_id) || id;
+//     const products = await Product.findAll({
+//       where: {
+//         id: productIds,
+//       },
+//     });
+//     // console.log("products", products);
+//     const formattedProducts = await Promise.all(
+//       products.map(async (p) => {
+//         const priceDetails = await getCalculatedProducts({
+//           user_id,
+//           product_id: p.id,
+//         });
+//         return priceDetails;
+//       }),
+//     );
+//     const formatedOderData = {
+//       ...orderData.toJSON(),
+//       items: undefined,
+//       order_id: undefined,
+//       total_amount: `${orderData.total_amount}`,
+//       payment_method: undefined,
+//       return_reason: undefined,
+//       createdAt: undefined,
+//       updatedAt: undefined,
+//       user_id: undefined,
+//       shipping_tax: "0.00",
+//       estimated_tax: "0.00",
+//       shipping_address: fullAddressText,
+//       order_address: undefined,
+//     };
+//     sendResponse(res, "Products fetched successfully", 200, {
+//       orders: formatedOderData,
+//       products: formattedProducts,
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
 const buyAgain = async (req, res, next) => {
   try {
     const user_id = req.user.id;
-    const id = req.body.id;
+    const { id, type } = req.body;
 
-    const orderData = await Order.findOne({
-      where: {
-        id: id,
-        user_id: user_id,
-        order_status: "Placed",
-      },
-    });
-    if (!orderData) {
-      throw new CoustomError("Order not found or cannot be reordered", 404);
+    let productIds = [];
+    let baseOrderData = null;
+
+    if (type === "order") {
+      const orderData = await Order.findOne({
+        where: { id: id, user_id: user_id },
+        include: [
+          {
+            model: Address,
+            as: "order_address",
+            attributes: { exclude: ["createdAt", "updatedAt"] },
+          },
+        ],
+      });
+
+      if (!orderData) throw new CoustomError("Order not found", 404);
+
+      const items =
+        typeof orderData.items === "string"
+          ? JSON.parse(orderData.items)
+          : orderData.items;
+      productIds = items.map((item) => item.product_id);
+      baseOrderData = orderData;
+    } else if (type === "product") {
+      productIds = [id];
+    } else {
+      throw new CoustomError("Invalid type provided", 400);
     }
+    if (productIds.length === 0)
+      throw new CoustomError("No products found to buy", 400);
 
-    const items =
-      typeof orderData.items === "string"
-        ? JSON.parse(orderData.items)
-        : orderData.items;
+    const products = await Product.findAll({ where: { id: productIds } });
 
-    // console.log("items", items);
-    const productIds = items.map((item) => item.product_id);
-    // console.log("productIds", productIds);
-    const products = await Product.findAll({
-      where: {
-        id: productIds,
-      },
-    });
-    // console.log("products", products);
     const formattedProducts = await Promise.all(
-      products.map(async (p) => {
-        const priceDetails = await getCalculatedProducts({
-          user_id,
-          product_id: p.id,
-        });
-        return priceDetails;
-      }),
+      products.map((p) => getCalculatedProducts({ user_id, product_id: p.id })),
     );
-    const formatedOderData = {
-      ...orderData.toJSON(),
-      items: undefined,
-      order_id: undefined,
-      total_amount: `${orderData.total_amount}`,
-      payment_method: undefined,
-      return_reason: undefined,
-      createdAt: undefined,
-      updatedAt: undefined,
-      user_id: undefined,
-      shipping_tax: "0.00",
-      estimated_tax: "0.00",
-    };
-    sendResponse(res, "Products fetched successfully", 200, {
-      orders: formatedOderData,
+    console.log("formattedProducts", formattedProducts);
+    const defaultAddress = await Address.findOne({
+      where: { user_id, is_default: 1 },
+    });
+    const addressToUse =
+      type === "order" && baseOrderData?.order_address
+        ? baseOrderData.order_address
+        : defaultAddress;
+    const fullAddressText = addressToUse
+      ? formatFullAddress(addressToUse)
+      : "Address not found";
+
+    const formattedOrderData = baseOrderData
+      ? {
+          ...baseOrderData.toJSON(),
+          items: undefined,
+          order_id: undefined,
+          total_amount: `${baseOrderData.total_amount}`,
+          payment_method: undefined,
+          shipping_address: fullAddressText,
+          order_address: undefined,
+          shipping_address_id:
+            baseOrderData?.order_address.id || defaultAddress.id,
+        }
+      : {
+          shipping_address: fullAddressText,
+          total_amount: `${formattedProducts[0].sale_price}`,
+          shipping_address_id:
+            baseOrderData?.order_address.id || defaultAddress.id,
+        };
+
+    sendResponse(res, "Data fetched successfully", 200, {
+      orders: formattedOrderData,
       products: formattedProducts,
     });
   } catch (error) {
@@ -2726,28 +2852,163 @@ const buyAgain = async (req, res, next) => {
   }
 };
 
+// const createReorderCheckoutSession = async (req, res, next) => {
+//   try {
+//     const { id, shipping_address_id, products } = req.body;
+//     const userId = req.user.id;
+
+//     const oldOrder = await Order.findOne({
+//       where: { id: id, user_id: userId },
+//       include: [
+//         {
+//           model: Address,
+//           as: "order_address",
+//           attributes: { exclude: ["createdAt", "updatedAt"] },
+//         },
+//       ],
+//     });
+
+//     if (!oldOrder) {
+//       throw new CoustomError("Original order not found", 404);
+//     }
+
+//     const itemsToProcess =
+//       products && products.length > 0
+//         ? products
+//         : typeof oldOrder.items === "string"
+//           ? JSON.parse(oldOrder.items)
+//           : oldOrder.items;
+
+//     const productIds = itemsToProcess.map((item) => item.id || item.product_id);
+
+//     const productDetailsList = await getCalculatedProducts({
+//       user_id: userId,
+//       product_id: productIds,
+//     });
+
+//     const itemsList = itemsToProcess.map((item) => {
+//       const pId = item.id || item.product_id;
+//       const latestData = productDetailsList.find((p) => p.id === pId);
+
+//       if (!latestData) {
+//         throw new CoustomError(
+//           `Product with ID ${pId} is no longer available`,
+//           400,
+//         );
+//       }
+
+//       return {
+//         product_id: pId,
+//         product_name: latestData.product_name,
+//         quantity: item.quantity,
+//         price: latestData.sale_price,
+//         subtotal: latestData.sale_price * item.quantity,
+//       };
+//     });
+
+//     let fullAddressText = null;
+//     if (shipping_address_id) {
+//       const addressData = await Address.findOne({
+//         where: {
+//           user_id: userId,
+//           id: shipping_address_id,
+//         },
+//       });
+//       if (addressData) {
+//         const addr = addressData;
+//         fullAddressText = `${addr.street_address}, ${addr.apartment ? addr.apartment + ", " : ""}${addr.city}, ${addr.state} - ${addr.zip_code}`;
+//       }
+//     } else {
+//       if (oldOrder && oldOrder.order_address) {
+//         const addr = oldOrder.order_address;
+//         fullAddressText = `${addr.street_address}, ${addr.apartment ? addr.apartment + ", " : ""}${addr.city}, ${addr.state} - ${addr.zip_code}`;
+//       }
+//     }
+
+//     const totalAmount = itemsList.reduce((sum, item) => sum + item.subtotal, 0);
+//     const totalQty = itemsList.reduce((sum, item) => sum + item.quantity, 0);
+
+//     if (totalAmount < 0.5) {
+//       throw new CoustomError("Minimum order amount is $0.50 USD", 400);
+//     }
+
+//     const newOrder = await Order.create({
+//       user_id: userId,
+//       order_id: `RE-ORD-${Date.now()}`,
+//       items: itemsList,
+//       quantity: totalQty,
+//       total_amount: totalAmount,
+//       shipping_address: fullAddressText,
+//       order_status: "Pending",
+//       order_date: new Date(),
+//       shippingAddress_id: shipping_address_id || oldOrder.order_address.id,
+//     });
+
+//     const line_items = itemsList.map((item) => ({
+//       price_data: {
+//         currency: "USD",
+//         product_data: { name: item.product_name },
+//         unit_amount: Math.round(item.price * 100),
+//       },
+//       quantity: item.quantity,
+//     }));
+
+//     const session = await stripe.checkout.sessions.create({
+//       line_items: line_items,
+//       mode: "payment",
+//       metadata: {
+//         order_id: newOrder.id,
+//         user_id: userId,
+//         old_order_id: id,
+//         is_reorder: "true",
+//         shipping_address: JSON.stringify(fullAddressText),
+//       },
+//       success_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+//       cancel_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+//     });
+
+//     sendResponse(res, "Re-order session created successfully", 200, {
+//       url: session.url,
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
 const createReorderCheckoutSession = async (req, res, next) => {
   try {
-    const { id, shipping_address, products } = req.body;
+    const { id, shipping_address_id, productList } = req.body;
     const userId = req.user.id;
+    let products = productList;
+    // console.log("products", products);
+    let itemsToProcess = [];
+    let oldOrder = null;
 
-    const oldOrder = await Order.findOne({
-      where: { id: id, user_id: userId },
-    });
+    if (id && Number(id) > 0) {
+      oldOrder = await Order.findOne({
+        where: { id: id, user_id: userId },
+        include: [{ model: Address, as: "order_address" }],
+      });
 
-    if (!oldOrder) {
-      throw new CoustomError("Original order not found", 404);
+      if (!oldOrder) throw new CoustomError("Original order not found", 404);
+
+      itemsToProcess =
+        products && products.length > 0
+          ? products
+          : typeof oldOrder.items === "string"
+            ? JSON.parse(oldOrder.items)
+            : oldOrder.items;
+    } else if (products && products.length > 0) {
+      itemsToProcess = products;
+    } else {
+      throw new CoustomError(
+        "Please provide an Order ID or Products to checkout",
+        400,
+      );
     }
 
-    const itemsToProcess =
-      products && products.length > 0
-        ? products
-        : typeof oldOrder.items === "string"
-          ? JSON.parse(oldOrder.items)
-          : oldOrder.items;
-
+    // --- Price Calculation (Generic for both cases) ---
     const productIds = itemsToProcess.map((item) => item.id || item.product_id);
-
     const productDetailsList = await getCalculatedProducts({
       user_id: userId,
       product_id: productIds,
@@ -2756,39 +3017,58 @@ const createReorderCheckoutSession = async (req, res, next) => {
     const itemsList = itemsToProcess.map((item) => {
       const pId = item.id || item.product_id;
       const latestData = productDetailsList.find((p) => p.id === pId);
-
-      if (!latestData) {
-        throw new CoustomError(
-          `Product with ID ${pId} is no longer available`,
-          400,
-        );
-      }
-
+      if (!latestData)
+        throw new CoustomError(`Product ${pId} is not available`, 400);
       return {
         product_id: pId,
         product_name: latestData.product_name,
-        quantity: item.quantity,
+        quantity: item.quantity || 1,
         price: latestData.sale_price,
-        subtotal: latestData.sale_price * item.quantity,
+        subtotal: latestData.sale_price * (item.quantity || 1),
       };
     });
 
+    // --- Address Handling ---
+    let fullAddressText = null;
+    let finalAddressId = shipping_address_id;
+
+    if (shipping_address_id) {
+      const addressData = await Address.findOne({
+        where: { user_id: userId, id: shipping_address_id },
+      });
+      if (addressData) {
+        fullAddressText = `${addressData.street_address}, ${addressData.apartment ? addressData.apartment + ", " : ""}${addressData.city}, ${addressData.state} - ${addressData.zip_code}`;
+      }
+    } else if (oldOrder && oldOrder.order_address) {
+      const addr = oldOrder.order_address;
+      fullAddressText = `${addr.street_address}, ${addr.apartment ? addr.apartment + ", " : ""}${addr.city}, ${addr.state} - ${addr.zip_code}`;
+      finalAddressId = oldOrder.order_address.id;
+    } else {
+      const defaultAddr = await Address.findOne({
+        where: { user_id: userId, is_default: 1 },
+      });
+      if (defaultAddr) {
+        fullAddressText = `${defaultAddr.street_address}, ${defaultAddr.city} - ${defaultAddr.zip_code}`;
+        finalAddressId = defaultAddr.id;
+      }
+    }
+    if (!fullAddressText)
+      throw new CoustomError("Shipping address is required", 400);
     const totalAmount = itemsList.reduce((sum, item) => sum + item.subtotal, 0);
     const totalQty = itemsList.reduce((sum, item) => sum + item.quantity, 0);
-
-    if (totalAmount < 0.5) {
-      throw new CoustomError("Minimum order amount is $0.50 USD", 400);
-    }
+    if (totalAmount < 0.5)
+      throw new CoustomError("Minimum amount is $0.50", 400);
 
     const newOrder = await Order.create({
       user_id: userId,
-      order_id: `RE-ORD-${Date.now()}`,
+      order_id: `ORD-${id ? "RE-" : ""}${Date.now()}`,
       items: itemsList,
       quantity: totalQty,
       total_amount: totalAmount,
-      shipping_address: shipping_address || oldOrder.shipping_address,
+      shipping_address: fullAddressText,
       order_status: "Pending",
       order_date: new Date(),
+      shippingAddress_id: finalAddressId,
     });
 
     const line_items = itemsList.map((item) => ({
@@ -2801,24 +3081,19 @@ const createReorderCheckoutSession = async (req, res, next) => {
     }));
 
     const session = await stripe.checkout.sessions.create({
-      line_items: line_items,
+      line_items,
       mode: "payment",
       metadata: {
         order_id: newOrder.id,
         user_id: userId,
-        old_order_id: id,
-        is_reorder: "true",
-        shipping_address: JSON.stringify(
-          shipping_address || oldOrder.shipping_address,
-        ),
+        is_reorder: id ? "true" : "false",
+        shipping_address: JSON.stringify(fullAddressText),
       },
       success_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `https://mern.yilstaging.com/payment-failed?session_id={CHECKOUT_SESSION_ID}`,
     });
 
-    sendResponse(res, "Re-order session created successfully", 200, {
-      url: session.url,
-    });
+    sendResponse(res, "Checkout session created", 200, { url: session.url });
   } catch (error) {
     next(error);
   }
@@ -2829,7 +3104,6 @@ const getAllOrders = async (req, res, next) => {
     const user_id = req.user.id;
     const orders = await Order.findAll({
       where: { user_id },
-
       order: [["order_date", "DESC"]],
       attributes: {
         exclude: [
@@ -2839,7 +3113,7 @@ const getAllOrders = async (req, res, next) => {
           "shipping_address",
           "payment_method",
           "return_reason",
-          "order_id",
+          // "order_id",
         ],
       },
       raw: true,
@@ -2867,7 +3141,7 @@ const fetchOrderDetails = async (req, res, next) => {
     const order = await Order.findOne({
       where: { id, user_id },
       attributes: {
-        exclude: ["createdAt", "updatedAt", "user_id", "order_id"],
+        exclude: ["createdAt", "updatedAt", "user_id"],
       },
       include: [
         {
@@ -2875,10 +3149,15 @@ const fetchOrderDetails = async (req, res, next) => {
           as: "transaction",
           attributes: ["invoice_url"],
         },
+        {
+          model: Address,
+          as: "order_address",
+          attributes: { exclude: ["createdAt", "updatedAt"] },
+        },
       ],
+
       raw: true,
       nest: true,
-      // raw: true,
     });
     if (!order) {
       throw new CoustomError("Order not found", 404);
@@ -2891,34 +3170,125 @@ const fetchOrderDetails = async (req, res, next) => {
       user_id,
       product_id: productIds,
     });
-
-    const productsWithQuantities = items.map((item) => {
-      const calculatedData = products.find((p) => p.id === item.product_id);
-
-      const unitPrice = calculatedData ? calculatedData.sale_price : item.price;
-      const quantity = item.quntaty || item.quantity || 1;
-
+    console.log("products", products);
+    const formattedProducts = items.map((item) => {
+      const pData = products.find((p) => p.id === item.product_id);
+      // console.log("pData", pData);
       return {
-        ...calculatedData,
-        item_total: (unitPrice * quantity).toFixed(2),
-        quantity: quantity,
+        product_name: pData?.product_name || "Product",
+        color: pData.color || "N/A",
+        size: pData.size || "N/A",
+        sale_price: `${parseFloat(item.price || 0)}`,
+        quantity: item.quntaty || item.quantity || 1,
+        product_images: pData?.product_images || "",
+        discount_percentage: pData.discount_applied,
       };
     });
 
-    const formattedOrder = {
-      ...order,
-      items: undefined,
-      total_amount: `${order.total_amount}`,
-      invoice_url: order.transaction ? order.transaction.invoice_url : null,
-      transaction: undefined,
-      shipping_tax: "0.00",
-      estimated_tax: "0.00",
+    const totalItemsCount = formattedProducts.reduce(
+      (acc, curr) => acc + curr.quantity,
+      0,
+    );
+    const totalItemsPrice = formattedProducts.reduce(
+      (acc, curr) => acc + curr.sale_price * curr.quantity,
+      0,
+    );
+
+    const addr = order.order_address;
+    const delivery_address = {
+      name: addr?.name || req.user.name,
+      phone: addr?.phone || req.user.phone,
+      address: addr
+        ? `${addr.street_address}, ${addr.apartment ? addr.apartment + ", " : ""}${addr.city}, ${addr.state} - ${addr.post_code}`
+        : "N/A",
     };
 
-    sendResponse(res, "Order details fetched successfully", 200, {
-      order: formattedOrder,
-      products: productsWithQuantities,
-    });
+    const orderDateObj = new Date(order.createdAt || new Date());
+
+    const action_flags = {
+      can_cancel: order.status === "Pending" || order.status === "Processing",
+      can_return: order.status === "Delivered",
+      can_reorder: true,
+    };
+
+    console.log("order", order);
+
+    const finalData = {
+      id: order.id,
+      order_id: order.order_id,
+      status: order.order_status,
+      invoice_url: order.transaction.invoice_url,
+      order_date: orderDateObj.toISOString().split("T")[0],
+      order_time: orderDateObj.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }),
+
+      products: formattedProducts,
+
+      items_summary: {
+        total_items: totalItemsCount,
+        total_price: `${totalItemsPrice}`,
+      },
+
+      price_breakdown: {
+        subtotal: `${totalItemsPrice}`,
+        discount: `${parseFloat(formattedProducts[0].discount_percentage || 0)}%`,
+        delivery_charges: parseFloat(order.delivery_charges || 0),
+        final_amount: `${parseFloat(order.total_amount)}`,
+        currency: "USD",
+      },
+
+      delivery_address: delivery_address,
+
+      // tracking_details: {
+      //   tracking_id: order.tracking_id || "N/A",
+      //   estimated_delivery_date: order.estimated_delivery_date || "N/A"
+      // },
+
+      // action_flags: action_flags
+    };
+
+    sendResponse(res, "Order summary fetched successfully", 200, finalData);
+
+    // let fullAddressText;
+    // if (order && order.order_address) {
+    //   const addr = order.order_address;
+    //   fullAddressText = `${addr.street_address}, ${addr.apartment ? addr.apartment + ", " : ""}${addr.city}, ${addr.state} - ${addr.post_code}`;
+    // }
+
+    // const productsWithQuantities = items.map((item) => {
+    //   const calculatedData = products.find((p) => p.id === item.product_id);
+
+    //   const unitPrice = calculatedData ? calculatedData.sale_price : item.price;
+    //   const quantity = item.quntaty || item.quantity || 1;
+
+    //   return {
+    //     ...calculatedData,
+
+    //     item_total: (unitPrice * quantity).toFixed(2),
+    //     quantity: quantity,
+    //   };
+    // });
+
+    // const formattedOrder = {
+    //   ...order,
+    //   items: undefined,
+    //   total_amount: `${order.total_amount}`,
+    //   invoice_url: order.transaction ? order.transaction.invoice_url : null,
+    //   transaction: undefined,
+    //   shipping_tax: "0.00",
+    //   estimated_tax: "0.00",
+    //   shipping_address: fullAddressText,
+    //   order_address: undefined,
+    // };
+    // const price_breakdown = {};
+
+    // sendResponse(res, "Order details fetched successfully", 200, {
+    //   order: formattedOrder,
+    //   products: productsWithQuantities,
+    // });
   } catch (error) {
     next(error);
   }
@@ -2944,6 +3314,184 @@ const cancelMyOrder = async (req, res, next) => {
       reason: reason || "No reason provided",
     });
     sendResponse(res, "Order cancelled successfully", 200);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getAllCountryCode = async (req, res, next) => {
+  try {
+    const countries = Country.getAllCountries().map((c) => ({
+      name: c.name,
+      isoCode: c.isoCode,
+    }));
+
+    sendResponse(res, "Fetching all country list", 200, {
+      countries,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getAllStateCode = async (req, res, next) => {
+  try {
+    const { country_code } = req.body; // Example: "IN", "US"
+    // console.log("country_code", country_code);
+    if (!country_code) {
+      return res.status(400).json({ message: "Country Code is required" });
+    }
+
+    const states = State.getStatesOfCountry(country_code).map((s) => ({
+      name: s.name,
+      isoCode: s.isoCode,
+    }));
+    // console.log("states", states);
+    sendResponse(res, "Order cancelled successfully", 200, {
+      states: states,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const allProduct = async (req, res, next) => {
+  try {
+    const allPro = await Product.findAll({
+      where: {
+        sale_price: {
+          [Op.gt]: 0,
+        },
+      },
+    });
+    sendResponse(res, "", 200, allPro);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getRecommendedProduct = async (req, res, next) => {
+  try {
+    const user_id = req.user.id;
+    const { image_width, image_height, landmarks } = req.body;
+    const allProduct = await Product.findAll({
+      where: {
+        sale_price: {
+          [Op.gt]: 0,
+        },
+      },
+    });
+    const allSize = await Size.findAll();
+
+    const predictedProduct = await axios.post(
+      "http://localhost:5000/api/predict-size",
+      {
+        image_width,
+        image_height,
+        landmarks,
+        products: allProduct,
+        productSize: allSize,
+      },
+    );
+    if (!predictedProduct) {
+      throw new CoustomError("there is an error through ai", 400);
+    }
+
+    // console.log("predictedProduct", predictedProduct.data.data.products);
+    const productData = predictedProduct.data.data.products;
+    const productIds = [...new Set(productData.map((item) => item.id))];
+    const productsWithPrices = await getCalculatedProducts({
+      product_id: productIds,
+      user_id,
+    });
+
+    sendResponse(res, "Featched all the product", 200, productsWithPrices);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const generateBabyTryOn = async (req, res, next) => {
+  try {
+    const { baby_img_url, garment_url } = req.body;
+
+    const getBase64FromUrl = async (url, customHeaders = {}) => {
+      const response = await axios.get(url, {
+        responseType: "arraybuffer",
+        headers: customHeaders,
+      });
+      const buffer = Buffer.from(response.data, "binary");
+      const mimeType = response.headers["content-type"];
+      return `data:${mimeType};base64,${buffer.toString("base64")}`;
+    };
+    console.log("Downloading and converting images...");
+
+    const [babyBase64, garmentBase64] = await Promise.all([
+      getBase64FromUrl(baby_img_url),
+      getBase64FromUrl(garment_url, {
+        "x-app-id": "BabyAiApp-Frontend-v1",
+      }),
+    ]);
+
+    const BASE_URL = "https://api.fashn.ai/v1";
+
+    const inputData = {
+      model_name: "tryon-max",
+      inputs: {
+        model_image: babyBase64,
+        product_image: garmentBase64,
+        generation_mode: "balanced",
+        // resolution: "4k",
+        // return_base64: true
+      },
+    };
+
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${FASHN_API_KEY}`,
+    };
+    let outputimage;
+    try {
+      const runResponse = await fetch(`${BASE_URL}/run`, {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify(inputData),
+      });
+      const runData = await runResponse.json();
+      console.log("runData", runData);
+      const predictionId = runData.id;
+      console.log("Prediction started, ID:", predictionId);
+      while (true) {
+        const statusResponse = await fetch(
+          `${BASE_URL}/status/${predictionId}`,
+          {
+            headers: headers,
+          },
+        );
+        const statusData = await statusResponse.json();
+        outputimage = statusData;
+        if (statusData.status === "completed") {
+          console.log("Prediction completed.");
+          console.log(statusData.output);
+          outputimage = statusData;
+          break;
+        } else if (
+          ["starting", "in_queue", "processing"].includes(statusData.status)
+        ) {
+          console.log("Prediction status:", statusData.status);
+          // outputimage = statusData;
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+        } else {
+          console.log("Prediction failed:", statusData.error);
+          outputimage = statusData;
+          break;
+        }
+        console.log("statusData", statusData);
+      }
+    } catch (error) {
+      console.error("Error:", error.message);
+    }
+    sendResponse(res, "genrated image", 200, outputimage);
   } catch (error) {
     next(error);
   }
@@ -2997,4 +3545,9 @@ module.exports = {
   getAllOrders,
   fetchOrderDetails,
   cancelMyOrder,
+  getAllCountryCode,
+  getAllStateCode,
+  allProduct,
+  getRecommendedProduct,
+  generateBabyTryOn,
 };
