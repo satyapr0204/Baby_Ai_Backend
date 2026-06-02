@@ -63,6 +63,9 @@ const getCalculatedProductsWithSuffling = async ({
   product_id,
   user_id = null,
   productWhereData = {},
+  requestedId = null,
+  page = 1,
+  size = 10,
 }) => {
   console.log(
     "product_id || category_id || productWhereData",
@@ -178,14 +181,12 @@ const getCalculatedProductsWithSuffling = async ({
           discountPct = parseFloat(firstRetailerData.discount) || 0;
         }
       }
-
       let finalPrice = cost;
       let markedPrice = cost;
       if (addonPct > 0 || discountPct > 0) {
         markedPrice = cost + cost * (addonPct / 100);
         finalPrice = markedPrice - markedPrice * (discountPct / 100);
       }
-
       let formattedImages = [];
       try {
         formattedImages =
@@ -217,7 +218,6 @@ const getCalculatedProductsWithSuffling = async ({
         msrp_price: undefined,
       };
     });
-    // --- SECTION 2: Grouping Logic (Optimized) ---
     const groupedProductsMap = new Map();
 
     calculatedList.forEach((prod) => {
@@ -225,36 +225,16 @@ const getCalculatedProductsWithSuffling = async ({
         ? prod.product_name.trim().toLowerCase()
         : `unknown_${prod.id}`;
 
-      const formatSizeName = (sizeObj) => {
-        if (!sizeObj || !sizeObj.name) return "";
-        return Array.isArray(sizeObj.name) ? sizeObj.name[0] : sizeObj.name;
-      };
-
-      if (groupedProductsMap.has(productNameKey)) {
-        const existingProduct = groupedProductsMap.get(productNameKey);
-
-        if (prod.size) {
-          const sizeExists = existingProduct.sizes.some(
-            (s) => s.id === prod.size.id,
-          );
-          if (!sizeExists) {
-            existingProduct.sizes.push({
-              id: prod.size.id,
-              name: formatSizeName(prod.size),
-              product_id: prod.id, // Ye individual entry ki ID hai
-            });
-          }
-        }
-      } else {
-        // Naya entry create karte waqt structure fix karo
+      if (!groupedProductsMap.has(productNameKey)) {
         const newProductGroup = {
           ...prod,
-          // Hum 'id' ko wahi rehne de rahe hain jo pehle product ki hai (Parent ID)
           sizes: prod.size
             ? [
                 {
                   id: prod.size.id,
-                  name: formatSizeName(prod.size),
+                  name: Array.isArray(prod.size.name)
+                    ? prod.size.name[0]
+                    : prod.size.name,
                   product_id: prod.id,
                 },
               ]
@@ -262,12 +242,33 @@ const getCalculatedProductsWithSuffling = async ({
         };
         delete newProductGroup.size;
         groupedProductsMap.set(productNameKey, newProductGroup);
+      } else {
+        const existingProduct = groupedProductsMap.get(productNameKey);
+        if (requestedId && Number(prod.id) === Number(requestedId)) {
+          const currentSizes = existingProduct.sizes;
+          Object.assign(existingProduct, prod);
+          existingProduct.sizes = currentSizes;
+          delete existingProduct.size;
+        }
+        if (prod.size) {
+          const sizeExists = existingProduct.sizes.some(
+            (s) => s.id === prod.size.id,
+          );
+          if (!sizeExists) {
+            existingProduct.sizes.push({
+              id: prod.size.id,
+              name: Array.isArray(prod.size.name)
+                ? prod.size.name[0]
+                : prod.size.name,
+              product_id: prod.id,
+            });
+          }
+        }
       }
     });
 
     let result = Array.from(groupedProductsMap.values());
 
-    // --- SECTION 3: Shuffling & Interleaving (Already Good) ---
     if (result.length > 1 && (!product_id || Array.isArray(product_id))) {
       const categoryBuckets = {};
       result.forEach((product) => {
@@ -276,7 +277,6 @@ const getCalculatedProductsWithSuffling = async ({
         categoryBuckets[catId].push(product);
       });
 
-      // Random shuffle each bucket
       Object.keys(categoryBuckets).forEach((catId) => {
         categoryBuckets[catId].sort(() => Math.random() - 0.5);
       });
@@ -296,8 +296,16 @@ const getCalculatedProductsWithSuffling = async ({
       }
       result = mixedResult;
     }
+    if (result.length === 0) return [];
 
-    return result; // Final clean and interleaved list
+    if (result.length === 1) {
+      if (category_id) {
+        return result;
+      }
+      return result[0];
+    }
+
+    return result;
   } catch (error) {
     console.error("Error in getCalculatedProducts:", error);
     throw error;

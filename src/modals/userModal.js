@@ -58,6 +58,22 @@ const User = sequelize.define(
     fcm_token: {
       type: DataTypes.STRING,
     },
+    stripe_customer_id: {
+      type: DataTypes.STRING,
+      defaultValue: null,
+    },
+    stripe_subscription_id: {
+      type: DataTypes.STRING,
+      defaultValue: null,
+    },
+    active_plan_id: {
+      type: DataTypes.INTEGER,
+      defaultValue: null,
+    },
+    current_subscription_id: {
+      type: DataTypes.INTEGER,
+      defaultValue: null,
+    },
   },
   {
     tableName: "users",

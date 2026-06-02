@@ -23,6 +23,9 @@ const StaticPage = sequelize.define('StaticPage', {
     is_delete: {
         type: DataTypes.INTEGER,
         defaultValue: 0
+    },
+    key:{
+        type: DataTypes.INTEGER,
     }
 }, {
     tableName: 'static_pages',

@@ -41,10 +41,12 @@ const {
   fetchAllPlans,
   createNewPlane,
   updatePlan,
+  cancelOrder,
 } = require("../../controllers/AdminControllers/controllers");
 
 const { authenticateToken } = require("../../middleware/authMiddleware");
 const validateBody = require("../../middleware/validator");
+const { cancelMyOrder } = require("../../controllers/UserControllers/controllers");
 
 const uploadBanner = path.join(__dirname, "../../Banners");
 const storage = multer.diskStorage({
@@ -272,5 +274,12 @@ adminRouter.post(
   validateBody(["id"]),
   updatePlan,
 );
+
+adminRouter.post(
+  '/cancel-order',
+  authenticateToken,
+  validateBody(['id']),
+  cancelOrder,
+)
 
 module.exports = adminRouter;

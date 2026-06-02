@@ -36,10 +36,10 @@ const Plan = sequelize.define(
     stripe_price_id: {
       type: DataTypes.STRING,
     },
-    quantaty: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0,
-    },
+    // quantaty: {
+    //   type: DataTypes.INTEGER,
+    //   defaultValue: 0,
+    // },
   },
   {
     tableName: "Plan",

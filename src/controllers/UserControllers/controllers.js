@@ -2,6 +2,8 @@ const FASHN_API_KEY = process.env.FASHN_API_KEY;
 const FASHN_BASE_URL = process.env.FASHN_AI_BASE_URL;
 const User = require("../../modals/userModal");
 const fs = require("fs").promises;
+const fs1 = require("fs");
+const { OpenAI } = require("openai");
 const CoustomError = require("../../utils/CoustomError");
 const jwt = require("jsonwebtoken");
 const { sendResponse } = require("../../utils/coustomResponse");
@@ -33,10 +35,35 @@ const Transaction = require("../../modals/transactionModal");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const { Country, State } = require("country-state-city");
 const { formatFullAddress } = require("../../utils/getFullAddress");
-const { createOrder } = require("../../utils/bambiniService");
+const { createOrder, trackOrder } = require("../../utils/bambiniService");
 const {
   getCalculatedProductsWithSuffling,
 } = require("../../utils/calclutePricewithSuffaling");
+const { paginateArray } = require("../../utils/paginateArray");
+const Plan = require("../../modals/planModal");
+const Subscriber = require("../../modals/subscriberModal");
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const createStripeCustomer = async (user_id, name, email) => {
+  try {
+    console.log("user_id, name, email", user_id, name, email);
+    const customer = await stripe.customers.create({
+      name: name,
+      email: email,
+      metadata: {
+        user_id: user_id,
+      },
+    });
+    if (customer) {
+      return customer.id;
+    }
+  } catch (error) {
+    throw new error("Helper error at createStripeCustomer: " + error.message);
+  }
+};
 
 const genrateOtpAndToken = async (input, name, channel, country_code) => {
   const otp = crypto.randomInt(10000, 99999).toString();
@@ -86,6 +113,99 @@ const ensureHttps = (data) => {
     return data.map((url) => getProxyUrl(url));
   }
   return getProxyUrl(data);
+};
+
+// User Subscription and payment related controllers
+const createCheckoutSessionForSubscription = async (req, res, next) => {
+  try {
+    const { id } = req.body;
+    const user_id = req.user.id;
+
+    const existingSubscription = await Subscriber.findOne({
+      where: { user_id: id },
+      order: [["createdAt", "DESC"]],
+    });
+
+    const now = new Date();
+    if (
+      existingSubscription &&
+      existingSubscription.end_date &&
+      existingSubscription.status == "active" &&
+      new Date(existingSubscription.end_date) > now
+    ) {
+      throw new CoustomError("User already has an active subscription", 400);
+    }
+
+    const subbscriptionPlan = await Plan.findOne({
+      where: {
+        id,
+      },
+    });
+    if (!subbscriptionPlan || !subbscriptionPlan.stripe_price_id) {
+      throw new CoustomError("Plan not found", 400);
+    }
+
+    const customer = await User.findOne({
+      where: {
+        id: user_id,
+      },
+    });
+    // console.log("customer", customer)
+    let stripe_customer_id = null;
+    if (!customer || customer.length <= 0) {
+      throw new CoustomError("User not found", 404);
+    }
+
+    if (customer.stripe_customer_id) {
+      stripe_customer_id = customer.stripe_customer_id;
+    } else {
+      stripe_customer_id = await createStripeCustomer(
+        customer.id,
+        customer.name,
+        customer.email,
+      );
+
+      if (!stripe_customer_id) {
+        throw new CoustomError("Stripe customer id not found", 400);
+      }
+
+      await User.update(
+        { stripe_customer_id },
+        {
+          where: {
+            id: user_id,
+          },
+        },
+      );
+    }
+
+    const isFirstTimeUser = !existingSubscription;
+    const session = await stripe.checkout.sessions.create({
+      customer: stripe_customer_id,
+      payment_method_types: ["card"],
+      mode: "subscription",
+      line_items: [
+        {
+          price: subbscriptionPlan.stripe_price_id,
+          quantity: 1,
+        },
+      ],
+
+      metadata: {
+        userId: customer.id.toString(),
+        userName: customer.name,
+        planId: subbscriptionPlan.id.toString(),
+        isSubscription: "true",
+      },
+      success_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+    });
+    return sendResponse(res, "Checkout session created successfully", 200, {
+      session: session.url,
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 const sendOtpForLogin = async (req, res, next) => {
@@ -609,7 +729,6 @@ const updateBabyProfileWithStep = async (req, res, next) => {
         );
       case "2":
         if (!baby_gender || !id) {
-          // throw new CoustomError("Gender is required!", 400);
           const missingField = !baby_gender ? "Gender" : "ID";
           throw new CoustomError(`${missingField} is required!`, 400);
         }
@@ -771,34 +890,88 @@ const homeData = async (req, res, next) => {
         },
       ],
     });
-    const finalResponse = categoryShop.map((cat) => {
-      const item = cat.toJSON();
-      let firstImage = null;
-      if (item.categories && item.categories.length > 0) {
-        const productImages = item.categories[0].product_images;
+    // const finalResponse = categoryShop.map((cat) => {
+    //   const item = cat.toJSON();
+    //   // console.log("item",item)
+    //  return item.name !== "Onezies";
 
-        const imagesArray =
-          typeof productImages === "string"
-            ? JSON.parse(productImages)
-            : productImages;
+    //   let firstImage = null;
+    //   if (item.categories && item.categories.length > 0) {
+    //     const productImages = item.categories[0].product_images;
 
-        firstImage =
-          imagesArray && imagesArray.length > 0 ? imagesArray[0] : null;
+    //     const imagesArray =
+    //       typeof productImages === "string"
+    //         ? JSON.parse(productImages)
+    //         : productImages;
+
+    //     firstImage =
+    //       imagesArray && imagesArray.length > 0 ? imagesArray[0] : null;
+    //   }
+    //   return {
+    //     id: item.id,
+    //     name: item.name,
+    //     category_image: firstImage,
+    //     is_active: item.is_active,
+    //     price_range: item.price_range,
+    //     discount_percentage: item.discount_percentage,
+    //     total_margin: item.total_margin,
+    //     addon_percentage: item.addon_percentage,
+    //     is_retailor_price_active: item.is_retailor_price_active,
+    //     createdAt: item.createdAt,
+    //     updatedAt: item.updatedAt,
+    //   };
+    // });
+
+    const finalResponse = categoryShop
+      .filter((cat) => {
+        // Pehle hi check kar lo, agar "Onezies" hai toh list se bahar nikaal do
+        const item = cat.toJSON();
+        return item.name !== "Onezies";
+      })
+      .map((cat) => {
+        const item = cat.toJSON();
+        let firstImage = null;
+
+        if (item.categories && item.categories.length > 0) {
+          const productImages = item.categories[0].product_images;
+
+          const imagesArray =
+            typeof productImages === "string"
+              ? JSON.parse(productImages)
+              : productImages;
+
+          firstImage =
+            imagesArray && imagesArray.length > 0 ? imagesArray[0] : null;
+        }
+
+        return {
+          id: item.id,
+          name: item.name,
+          category_image: firstImage,
+          is_active: item.is_active,
+          price_range: item.price_range,
+          discount_percentage: item.discount_percentage,
+          total_margin: item.total_margin,
+          addon_percentage: item.addon_percentage,
+          is_retailor_price_active: item.is_retailor_price_active,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        };
+      });
+
+    if (finalResponse.length > 0) {
+      for (let i = finalResponse.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [finalResponse[i], finalResponse[j]] = [
+          finalResponse[j],
+          finalResponse[i],
+        ];
       }
-      return {
-        id: item.id,
-        name: item.name,
-        category_image: firstImage,
-        is_active: item.is_active,
-        price_range: item.price_range,
-        discount_percentage: item.discount_percentage,
-        total_margin: item.total_margin,
-        addon_percentage: item.addon_percentage,
-        is_retailor_price_active: item.is_retailor_price_active,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      };
-    });
+    }
+
+    // if (!finalResponse || finalResponse.length === 0) {
+    //   throw new CoustomError("Category not found", 404);
+    // }
 
     const allBanners = bannersData.map((banner) => {
       const bannerJson = banner.toJSON();
@@ -944,12 +1117,6 @@ const deleteFromWishlist = async (req, res, next) => {
 
 const babyCategoryData = async (req, res, next) => {
   try {
-    // const categories = await Category.findAll({
-    //   where: {
-    //     is_active: 1,
-    //   },
-    // });
-
     const categoryShop = await Category.findAll({
       where: {
         is_active: 1,
@@ -978,7 +1145,6 @@ const babyCategoryData = async (req, res, next) => {
         firstImage =
           imagesArray && imagesArray.length > 0 ? imagesArray[0] : null;
       }
-
       return {
         id: item.id,
         name: item.name,
@@ -994,7 +1160,20 @@ const babyCategoryData = async (req, res, next) => {
       };
     });
 
-    if (!finalResponse) throw new CoustomError("Category not found", 404);
+    if (finalResponse.length > 0) {
+      for (let i = finalResponse.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [finalResponse[i], finalResponse[j]] = [
+          finalResponse[j],
+          finalResponse[i],
+        ];
+      }
+    }
+
+    if (!finalResponse || finalResponse.length === 0) {
+      throw new CoustomError("Category not found", 404);
+    }
+
     sendResponse(res, "Baby category data fetched successfully", 200, {
       categories: finalResponse,
       count: finalResponse.length,
@@ -1171,121 +1350,57 @@ const productCategoryWiseData = async (req, res, next) => {
     const { category_id } = req.body;
     const user_id = req.user.id;
 
-    // const categoryData = await Category.findOne({
-    //   where: { id: category_id, is_active: 1 },
-    //   include: [
-    //     {
-    //       model: Retailer,
-    //       as: "retailers",
-    //       attributes: ["addon_percentage", "discount", "selected_categories"], // selected_categories fetch kiya
-    //       through: { attributes: [] },
-    //       where: { is_active: 1 },
-    //       required: false,
-    //     },
-    //   ],
-    // });
+    const categoryData = await Category.findOne({
+      where: {
+        id: category_id,
+        is_active: 1,
+      },
+    });
 
-    // if (!categoryData) {
-    //   throw new CoustomError("Category not found", 404);
-    // }
+    if (!categoryData) {
+      throw new CoustomError("Category not found", 404);
+    }
 
-    // const category = categoryData.get({ plain: true });
-
-    // console.log("category", category);
-
-    // const firstRetailer = category.retailers?.[0] || null;
-
-    // let addonPct = parseFloat(category.addon_percentage) || 0;
-    // let discountPct = parseFloat(category.discount_percentage) || 0;
-
-    // if (firstRetailer) {
-    //   const selectedCats = firstRetailer.selected_categories || [];
-
-    //   const isEligibleForRetailerDiscount = selectedCats.includes(
-    //     Number(category_id),
-    //   );
-
-    //   if (isEligibleForRetailerDiscount) {
-    //     if (addonPct === 0)
-    //       addonPct = parseFloat(firstRetailer.addon_percentage) || 0;
-    //     if (discountPct === 0)
-    //       discountPct = parseFloat(firstRetailer.discount) || 0;
-    //     console.log("Retailer Discount Applied for this category");
-    //   } else {
-    //     console.log(
-    //       "Retailer found but Category not in selected_categories. Using Category defaults.",
-    //     );
-    //   }
-    // }
-
-    // console.log(`Final Addon: ${addonPct}, Final Discount: ${discountPct}`);
-
-    // const products = await Product.findAll({
-    //   where: {
-    //     category_id: category_id,
-    //     sale_price: { [Op.gt]: 0 },
-    //   },
-    //   include: [
-    //     {
-    //       model: Wishlist,
-    //       as: "wishlists",
-    //       where: { user_id: user_id },
-    //       required: false,
-    //     },
-    //   ],
-    // });
-
-    // const updatedProducts = products.map((product) => {
-    //   const p = product.toJSON();
-
-    //   let formattedImages = [];
-    //   try {
-    //     formattedImages =
-    //       typeof p.product_images === "string"
-    //         ? JSON.parse(p.product_images)
-    //         : p.product_images;
-    //   } catch (e) {
-    //     formattedImages = [];
-    //   }
-
-    //   const cost = parseFloat(p.sale_price) || 0;
-    //   let finalPrice = cost;
-
-    //   if (addonPct > 0 || discountPct > 0) {
-    //     const markedPrice = cost + cost * (addonPct / 100);
-    //     finalPrice = markedPrice - markedPrice * (discountPct / 100);
-    //   }
-
-    //   if (finalPrice <= 0) finalPrice = cost;
-
-    //   const is_fav = p.wishlists && p.wishlists.length > 0;
-    //   delete p.wishlists;
-    //   delete p.product_url;
-
-    //   return {
-    //     ...p,
-    //     product_images: formattedImages,
-    //     sale_price: finalPrice.toFixed(2),
-    //     is_fav: is_fav,
-    //   };
-    // });
-
-    // const products = await getCalculatedProductsWithSuffling({
-    //   category_id,
-    //   user_id: user_id,
-    // });
-    const products = await getCalculatedProducts({
+    const products = await getCalculatedProductsWithSuffling({
       category_id,
       user_id: user_id,
     });
 
-    const securedProducts = products.map((product) => ({
-      ...product,
-    }));
+    // const products = await getCalculatedProducts({
+    //   category_id,
+    //   user_id: user_id,
+    // });
 
     sendResponse(res, "Products fetched successfully", 200, {
       count: products.length,
-      products: securedProducts,
+      products: products,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const productCategoryWiseDataPagination = async (req, res, next) => {
+  try {
+    const { category_id, page, limit } = req.body;
+    const user_id = req.user.id;
+
+    const products = await getCalculatedProductsWithSuffling({
+      category_id,
+      user_id: user_id,
+    });
+    // const products = await getCalculatedProducts({
+    //   category_id,
+    //   user_id: user_id,
+    // });
+
+    const result = paginateArray(products, page, limit, products);
+
+    console.log("result.paginatedItems", result.paginatedItems.length);
+
+    sendResponse(res, "Products fetched successfully", 200, {
+      count: result.paginatedItems.length,
+      products: result.paginatedItems,
     });
   } catch (error) {
     next(error);
@@ -1368,10 +1483,33 @@ const fetchProductDetails = async (req, res, next) => {
       },
     });
     const babies = await processBabyData(babyProfile);
-    const productDetails = await getCalculatedProducts({
-      product_id: id,
-      user_id: user_id,
+    // const productDetails = await getCalculatedProducts({
+    //   product_id: id,
+    //   user_id: user_id,
+    // });
+
+    const targetProduct = await Product.findByPk(id);
+
+    if (!targetProduct) {
+      return { message: "Product not found" };
+    }
+
+    const allSizeProducts = await Product.findAll({
+      where: {
+        product_name: targetProduct.product_name,
+        sale_price: { [Op.gt]: 0 },
+      },
+      attributes: ["id"],
     });
+
+    const allIds = allSizeProducts.map((p) => p.id);
+
+    const productDetails = await getCalculatedProductsWithSuffling({
+      product_id: allIds,
+      user_id: user_id,
+      requestedId: id,
+    });
+
     const babyInfo =
       is_admin == 1
         ? babies
@@ -1901,7 +2039,12 @@ const fetchAllCartItems = async (req, res, next) => {
     let relatedOutfits = [];
 
     if (categoryIds.length > 0) {
-      const rawRelated = await getCalculatedProducts({
+      // const rawRelated = await getCalculatedProducts({
+      //   user_id,
+      //   category_id: categoryIds,
+      //   limit: 10,
+      // });
+      const rawRelated = await getCalculatedProductsWithSuffling({
         user_id,
         category_id: categoryIds,
         limit: 10,
@@ -1951,7 +2094,7 @@ const fetchAllOrderedItems = async (req, res, next) => {
       exclude: ["createdAt", "updatedAt", "user_id", "order_date"],
       raw: true,
     });
-    console.log("orders", orders);
+    // console.log("orders", orders);
     let allProductIds = [];
     let categories = [];
     orders.forEach((order) => {
@@ -1981,24 +2124,49 @@ const fetchAllOrderedItems = async (req, res, next) => {
       limit: 15,
     });
 
-    const formattedSuggestions = await Promise.all(
-      suggestedOutfits.map(async (p) => {
-        const finalPriceDetails = await getCalculatedProducts({
-          user_id,
-          product_id: p.id,
-        });
+    // const formattedSuggestions = await Promise.all(
+    //   suggestedOutfits.map(async (p) => {
+    //     // const finalPriceDetails = await getCalculatedProducts({
+    //     //   user_id,
+    //     //   product_id: p.id,
+    //     // });
 
-        return finalPriceDetails;
-      }),
-    );
+    //     const finalPriceDetails = await getCalculatedProductsWithSuffling({
+    //       user_id,
+    //       product_id: p.id,
+    //     });
 
-    console.log("formattedSuggestions", formattedSuggestions.length);
+    //     return finalPriceDetails;
+    //   }),
+    // );
+
+    const productIds = suggestedOutfits.map((p) => p.id);
+
+    let formattedSuggestions = [];
+
+    if (productIds.length > 0) {
+      formattedSuggestions = await getCalculatedProductsWithSuffling({
+        user_id,
+        product_id: productIds,
+      });
+    }
+
+    if (formattedSuggestions && !Array.isArray(formattedSuggestions)) {
+      formattedSuggestions = [formattedSuggestions];
+    }
+
+    console.log("formattedSuggestions", formattedSuggestions);
 
     const formattedResponse = orders.map((order) => {
       const items =
         typeof order.items === "string" ? JSON.parse(order.items) : order.items;
 
-      const detail = productsDetails.find((p) => p.id === items[0].product_id);
+      const detail = productsDetails.find(
+        (p) => p.id === Number(items[0].product_id),
+      );
+      // if (order.id===102) {
+      //   console.log("detail", detail);
+      // }
       let formattedImages = [];
       try {
         formattedImages =
@@ -2008,13 +2176,13 @@ const fetchAllOrderedItems = async (req, res, next) => {
       } catch (e) {
         formattedImages = [];
       }
-
+      console.log("formattedImages", formattedImages);
       return {
-        order_id: order.id,
+        order_id: Number(order.id),
         total_amount: `${order.total_amount}`,
         products_name: items[0].product_name,
         product_images: formattedImages,
-        product_id: items[0].product_id,
+        product_id: Number(items[0].product_id),
       };
     });
     sendResponse(res, "Ordered items fetched successfully", 200, {
@@ -2239,7 +2407,7 @@ const helpAndSupport = async (req, res, next) => {
             <p style="margin-top:25px; color: #ff4d4d;"><strong>Action:</strong> Please reach out to the user via email or phone to resolve this query.</p>
         </div>
         <div class="footer">
-            Admin Dashboard | Baby AI System Alert
+            Admin Dashboard | Baby AI System Alert | ${new Date().toLocaleDateString()}
         </div>
     </body>
     </html>
@@ -2307,6 +2475,9 @@ const placeOrder = async (req, res, next) => {
           (calculatedData
             ? calculatedData.sale_price
             : item.product.sale_price) * item.quantity,
+        actual_price: calculatedData
+          ? calculatedData.actual_price
+          : item.product.actual_price,
       };
     });
 
@@ -2434,6 +2605,9 @@ const createCheckoutSession = async (req, res, next) => {
         quantity: item.quantity,
         price: finalPrice,
         subtotal: finalPrice * item.quantity,
+        actual_price: calculatedData
+          ? calculatedData.actual_price
+          : item.product.actual_price,
       };
     });
 
@@ -2504,6 +2678,7 @@ const createCheckoutSession = async (req, res, next) => {
 const verifyPayment = async (req, res, next) => {
   try {
     const { sessionId } = req.body;
+    console.log("sessionId", sessionId);
     if (!sessionId) throw new CoustomError("Session ID is required", 400);
 
     const existingTx = await Transaction.findOne({
@@ -2518,16 +2693,136 @@ const verifyPayment = async (req, res, next) => {
     let session;
     try {
       session = await stripe.checkout.sessions.retrieve(sessionId, {
-        expand: ["invoice"],
+        expand: ["invoice", "subscription", "payment_intent", "customer"],
       });
     } catch (err) {
+      console.log("err", err);
       throw new CoustomError("Invalid Session ID", 400);
+    }
+
+    const { metadata, payment_status, mode, subscription } = session;
+
+    // if (mode === "subscription") {
+    //   if(payment_status === "paid") {
+    //     throw new CoustomError("Subscription payment not successful", 400);
+
+    //   const newSubscriber = await Subscriber.create({
+    //     user_id: metadata.userId,
+    //     plan_id: metadata.planId,
+    //     stripe_subscription_id: subscription.id,
+    //     status: "active",
+    //     start_date: new Date(subscription.current_period_start * 1000),
+    //     end_date: new Date(subscription.current_period_end * 1000),
+    //     stripe_invoice_url: session.invoice?.hosted_invoice_url,
+    //     stripe_invoice_pdf: session.invoice?.invoice_pdf,
+    //     payment_method: session.payment_method_types[0],
+    //   });
+
+    // }
+    // else {
+
+    // }
+
+    //   await Transaction.create({
+    //     user_id: metadata.userId,
+    //     subscription_id: newSubscriber.id,
+    //     stripe_session_id: sessionId,
+    //     transaction_id:
+    //       subscription.latest_invoice.payment_intent ||
+    //       session.payment_intent ||
+    //       subscription.id,
+    //     payment_intent_id:  subscription.latest_invoice.payment_intent,
+    //     invoice_id:
+    //       session.invoice?.id ||
+    //       (typeof session.invoice === "string" ? session.invoice : null),
+    //     invoice_url: session.invoice
+    //       ? session.invoice.hosted_invoice_url
+    //       : null,
+    //     amount: session.amount_total / 100,
+    //     status: "paid",
+    //     payment_method: session.payment_method_types[0],
+    //   });
+
+    //   // 5. User Model Update (Premium status ke liye)
+    //   await User.update(
+    //     { current_subscription_id: newSubscriber.id },
+    //     { where: { id: metadata.userId } },
+    //   );
+
+    //   return sendResponse(res, "Subscription successful", 200, {
+    //     subscriptionId: newSubscriber.id,
+    //   });
+    // }
+
+    if (mode === "subscription") {
+      const isPaid = payment_status === "paid";
+
+      console.log("Raw Stripe Start:", subscription.current_period_start);
+      console.log(
+        "Formatted JS Date:",
+        new Date(subscription.current_period_start * 1000),
+      );
+
+      const newSubscriber = await Subscriber.create({
+        user_id: metadata.userId,
+        plan_id: metadata.planId,
+        stripe_subscription_id: subscription?.id || null,
+        status: isPaid ? "active" : "failed",
+        start_date: subscription
+          ? new Date(subscription.current_period_start * 1000)
+          : new Date(),
+        end_date: subscription
+          ? new Date(subscription.current_period_end * 1000)
+          : null,
+        stripe_invoice_url: session.invoice?.hosted_invoice_url || null,
+        stripe_invoice_pdf: session.invoice?.invoice_pdf || null,
+        payment_method: session.payment_method_types[0] || "card",
+      });
+
+      const transaction = await Transaction.create({
+        user_id: metadata.userId,
+        subscription_id: newSubscriber.id,
+        stripe_session_id: sessionId,
+        transaction_id:
+          subscription?.latest_invoice?.payment_intent ||
+          subscription?.id ||
+          "n/a",
+        payment_intent_id: subscription?.latest_invoice?.payment_intent || null,
+        invoice_id:
+          session.invoice?.id ||
+          (typeof session.invoice === "string" ? session.invoice : null),
+        invoice_url: session.invoice?.hosted_invoice_url || null,
+        amount: session.amount_total / 100,
+        status: isPaid ? "paid" : "failed",
+        payment_method: session.payment_method_types[0] || "card",
+      });
+
+      if (isPaid) {
+        await User.update(
+          {
+            current_subscription_id: newSubscriber.id,
+            stripe_subscription_id: subscription?.id || null,
+          },
+          { where: { id: metadata.userId } },
+        );
+        await newSubscriber.update({ transaction_id: transaction.id }); // Subscriber record ko Transaction ID se update karna
+        return sendResponse(res, "Subscription activated successfully", 200, {
+          subscriptionId: newSubscriber.id,
+        });
+      } else {
+        // Agar fail hua toh response
+        return res.status(200).json({
+          success: false,
+          message: "Subscription payment failed. Status recorded as failed.",
+          subscriptionId: newSubscriber.id,
+        });
+      }
     }
 
     const orderId = session.metadata.order_id;
     const userId = session.metadata.user_id;
     // const cartIds = JSON.parse(session.metadata.cart_id);
-    const metadata = session.metadata;
+    // const metadata = session.metadata;
 
     let cartIds = null;
     let isReorder = metadata.is_reorder === "true";
@@ -2615,7 +2910,6 @@ const verifyPayment = async (req, res, next) => {
       });
     } else {
       await order.update({ order_status: "Failed" });
-
       await Transaction.create({
         user_id: userId,
         order_id: order.id,
@@ -2792,7 +3086,6 @@ const buyAgain = async (req, res, next) => {
       });
 
       if (!orderData) throw new CoustomError("Order not found", 404);
-
       const items =
         typeof orderData.items === "string"
           ? JSON.parse(orderData.items)
@@ -2812,7 +3105,7 @@ const buyAgain = async (req, res, next) => {
     const formattedProducts = await Promise.all(
       products.map((p) => getCalculatedProducts({ user_id, product_id: p.id })),
     );
-    console.log("formattedProducts", formattedProducts);
+
     const defaultAddress = await Address.findOne({
       where: { user_id, is_default: 1 },
     });
@@ -2834,13 +3127,13 @@ const buyAgain = async (req, res, next) => {
           shipping_address: fullAddressText,
           order_address: undefined,
           shipping_address_id:
-            baseOrderData?.order_address.id || defaultAddress.id,
+            baseOrderData?.order_address?.id ?? defaultAddress?.id ?? null,
         }
       : {
           shipping_address: fullAddressText,
           total_amount: `${formattedProducts[0].sale_price}`,
           shipping_address_id:
-            baseOrderData?.order_address.id || defaultAddress.id,
+            baseOrderData?.order_address?.id ?? defaultAddress?.id ?? null,
         };
 
     sendResponse(res, "Data fetched successfully", 200, {
@@ -3009,6 +3302,7 @@ const createReorderCheckoutSession = async (req, res, next) => {
 
     // --- Price Calculation (Generic for both cases) ---
     const productIds = itemsToProcess.map((item) => item.id || item.product_id);
+    console.log("productIds", productIds);
     const productDetailsList = await getCalculatedProducts({
       user_id: userId,
       product_id: productIds,
@@ -3016,7 +3310,8 @@ const createReorderCheckoutSession = async (req, res, next) => {
 
     const itemsList = itemsToProcess.map((item) => {
       const pId = item.id || item.product_id;
-      const latestData = productDetailsList.find((p) => p.id === pId);
+      // console.log(object)
+      const latestData = productDetailsList.find((p) => p.id == pId);
       if (!latestData)
         throw new CoustomError(`Product ${pId} is not available`, 400);
       return {
@@ -3025,6 +3320,7 @@ const createReorderCheckoutSession = async (req, res, next) => {
         quantity: item.quantity || 1,
         price: latestData.sale_price,
         subtotal: latestData.sale_price * (item.quantity || 1),
+        actual_price: latestData.actual_price,
       };
     });
 
@@ -3036,6 +3332,9 @@ const createReorderCheckoutSession = async (req, res, next) => {
       const addressData = await Address.findOne({
         where: { user_id: userId, id: shipping_address_id },
       });
+      if (!addressData)
+        throw new CoustomError("This shipping address is not found", 404);
+
       if (addressData) {
         fullAddressText = `${addressData.street_address}, ${addressData.apartment ? addressData.apartment + ", " : ""}${addressData.city}, ${addressData.state} - ${addressData.zip_code}`;
       }
@@ -3047,6 +3346,8 @@ const createReorderCheckoutSession = async (req, res, next) => {
       const defaultAddr = await Address.findOne({
         where: { user_id: userId, is_default: 1 },
       });
+      if (!defaultAddr)
+        throw new CoustomError("Default shipping address is required", 400);
       if (defaultAddr) {
         fullAddressText = `${defaultAddr.street_address}, ${defaultAddr.city} - ${defaultAddr.zip_code}`;
         finalAddressId = defaultAddr.id;
@@ -3054,6 +3355,7 @@ const createReorderCheckoutSession = async (req, res, next) => {
     }
     if (!fullAddressText)
       throw new CoustomError("Shipping address is required", 400);
+
     const totalAmount = itemsList.reduce((sum, item) => sum + item.subtotal, 0);
     const totalQty = itemsList.reduce((sum, item) => sum + item.quantity, 0);
     if (totalAmount < 0.5)
@@ -3090,7 +3392,7 @@ const createReorderCheckoutSession = async (req, res, next) => {
         shipping_address: JSON.stringify(fullAddressText),
       },
       success_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `https://mern.yilstaging.com/payment-failed?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
     });
 
     sendResponse(res, "Checkout session created", 200, { url: session.url });
@@ -3155,7 +3457,6 @@ const fetchOrderDetails = async (req, res, next) => {
           attributes: { exclude: ["createdAt", "updatedAt"] },
         },
       ],
-
       raw: true,
       nest: true,
     });
@@ -3170,7 +3471,7 @@ const fetchOrderDetails = async (req, res, next) => {
       user_id,
       product_id: productIds,
     });
-    console.log("products", products);
+
     const formattedProducts = items.map((item) => {
       const pData = products.find((p) => p.id === item.product_id);
       // console.log("pData", pData);
@@ -3179,6 +3480,7 @@ const fetchOrderDetails = async (req, res, next) => {
         color: pData.color || "N/A",
         size: pData.size || "N/A",
         sale_price: `${parseFloat(item.price || 0)}`,
+        actual_price: `${parseFloat(item?.actual_price || 0)}`,
         quantity: item.quntaty || item.quantity || 1,
         product_images: pData?.product_images || "",
         discount_percentage: pData.discount_applied,
@@ -3193,6 +3495,33 @@ const fetchOrderDetails = async (req, res, next) => {
       (acc, curr) => acc + curr.sale_price * curr.quantity,
       0,
     );
+
+    const totalItemsPriceForDiscount = formattedProducts.reduce(
+      (acc, curr) => acc + curr.actual_price * curr.quantity,
+      0,
+    );
+
+    const formatedOrder = formattedProducts.map((p) => {
+      return {
+        ...p,
+        product_name: p.product_name,
+        actual_price: `${Number(p.actual_price) * p.quantity}`,
+        color: undefined,
+        size: undefined,
+        product_images: undefined,
+        discount_percentage: undefined,
+        sale_price: undefined,
+      };
+    });
+
+    const grandTotal = formatedOrder.reduce((acc, cur) => {
+      return acc + Number(cur.actual_price);
+    }, 0);
+
+    const orderSummary = {
+      item_sum: formatedOrder,
+      item_total: `${grandTotal}`,
+    };
 
     const addr = order.order_address;
     const delivery_address = {
@@ -3210,9 +3539,6 @@ const fetchOrderDetails = async (req, res, next) => {
       can_return: order.status === "Delivered",
       can_reorder: true,
     };
-
-    console.log("order", order);
-
     const finalData = {
       id: order.id,
       order_id: order.order_id,
@@ -3227,20 +3553,22 @@ const fetchOrderDetails = async (req, res, next) => {
 
       products: formattedProducts,
 
-      items_summary: {
-        total_items: totalItemsCount,
-        total_price: `${totalItemsPrice}`,
-      },
+      items_order: orderSummary,
 
       price_breakdown: {
-        subtotal: `${totalItemsPrice}`,
+        actual_amount: `${grandTotal}`,
         discount: `${parseFloat(formattedProducts[0].discount_percentage || 0)}%`,
-        delivery_charges: parseFloat(order.delivery_charges || 0),
+        discount_amount: `${(
+          totalItemsPriceForDiscount *
+          (parseFloat(formattedProducts[0].discount_percentage || 0) / 100)
+        ).toFixed(2)}`,
+        // delivery_charges: parseFloat(order.delivery_charges || 0),
         final_amount: `${parseFloat(order.total_amount)}`,
         currency: "USD",
       },
 
       delivery_address: delivery_address,
+      payment_method: order.payment_method || "N/A",
 
       // tracking_details: {
       //   tracking_id: order.tracking_id || "N/A",
@@ -3480,6 +3808,7 @@ const generateBabyTryOn = async (req, res, next) => {
         ) {
           console.log("Prediction status:", statusData.status);
           // outputimage = statusData;
+
           await new Promise((resolve) => setTimeout(resolve, 3000));
         } else {
           console.log("Prediction failed:", statusData.error);
@@ -3497,7 +3826,98 @@ const generateBabyTryOn = async (req, res, next) => {
   }
 };
 
+const getOrder = async (req, res, next) => {
+  try {
+    const user_id = req.user.id;
+    const orderId = req.body.id;
+    const userData = await User.findByPk(user_id);
+    const order = await createOrder(orderId, userData);
+    sendResponse(res, "Bambini order response", 200, order);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const trackOrderC = async (req, res, next) => {
+  try {
+    const user_id = req.user.id;
+    const orderId = req.body.id;
+    const ordertracking = await trackOrder();
+    sendResponse(res, "Bambini order tracking response", 200, ordertracking);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const generateBabyTryOnModal = async (req, res, next) => {
+  try {
+    const prompt = req.body.prompt;
+
+    const BABY_PROMPT = `
+      Cute baby girl wearing uploaded dress.
+      Standing pose.
+      White background.
+      `;
+
+    const clothPath = req.file.path;
+
+    const compressedPath = `uploads/compressed-${Date.now()}.jpg`;
+
+    await sharp(clothPath)
+      .resize(512)
+      .jpeg({ quality: 70 })
+      .toFile(compressedPath);
+
+    console.log("clothPath", fs1.createReadStream(compressedPath));
+
+    const imageFile = await OpenAI.toFile(
+      fs1.createReadStream(compressedPath),
+      "dress.jpg",
+    );
+
+    const result = await client.images.edit({
+      model: "gpt-image-1",
+      image: imageFile,
+      prompt: BABY_PROMPT || prompt,
+      size: "512x512",
+      n: 1,
+    });
+
+    fs1.unlinkSync(clothPath);
+
+    res.json({
+      success: true,
+      image: result.data[0].b64_json,
+      response: result,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
+
+const fetchAllPlans = async (req, res, next) => {
+  try {
+    const plans = await Plan.findAll({
+      where: {
+        is_active: 1,
+      },
+    });
+    if (!plans || plans.length === 0)
+      throw new CoustomError("No plans found", 404);
+
+    sendResponse(res, "All plans fetched successfully", 200, plans);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
+  createCheckoutSessionForSubscription,
   sendOtpForLogin,
   verifyOtp,
   sendOtpForUpdatePhoneEmail,
@@ -3550,4 +3970,9 @@ module.exports = {
   allProduct,
   getRecommendedProduct,
   generateBabyTryOn,
+  getOrder,
+  trackOrderC,
+  productCategoryWiseDataPagination,
+  generateBabyTryOnModal,
+  fetchAllPlans,
 };

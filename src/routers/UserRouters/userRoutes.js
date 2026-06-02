@@ -52,6 +52,11 @@ const {
   allProduct,
   getRecommendedProduct,
   generateBabyTryOn,
+  getOrder,
+  trackOrderC,
+  productCategoryWiseDataPagination,
+  generateBabyTryOnModal,
+  createCheckoutSessionForSubscription,
 } = require("../../controllers/UserControllers/controllers");
 const {
   getRecommendedSize,
@@ -63,8 +68,10 @@ const fs = require("fs");
 const {
   getFaqs,
   allStaticPages,
+  fetchAllPlans,
 } = require("../../controllers/AdminControllers/controllers");
 const createMulterStorage = require("../../utils/path-to-above-file");
+
 const userRouter = require("express").Router();
 
 // Multer
@@ -90,6 +97,11 @@ const uploadBabyImage = createMulterStorage(uploadBabyProfileDir);
 
 const uploadProfileAvatarDir = path.join(__dirname, "../../ProfileAvatarImage");
 const uploadUserAvatar = createMulterStorage(uploadProfileAvatarDir);
+
+// Taking plan data for subscription
+userRouter.post('/init-subscription', authenticateToken, createCheckoutSessionForSubscription);
+
+
 
 // Auth api
 userRouter.post(
@@ -175,6 +187,13 @@ userRouter.post(
   authenticateToken,
   validateBody(["category_id"]),
   productCategoryWiseData,
+);
+
+userRouter.post(
+  "/category-products-pagination",
+  authenticateToken,
+  validateBody(["category_id"]),
+  productCategoryWiseDataPagination,
 );
 
 userRouter.get("/proxy-image", proxyImage);
@@ -358,6 +377,7 @@ userRouter.post("/state-code", authenticateToken, getAllStateCode);
 
 // Ai Servicess
 // userRouter.post("/predict-size", authenticateToken, getRecommendedSize);
+
 userRouter.post(
   "/predict-size",
   authenticateToken,
@@ -367,6 +387,15 @@ userRouter.post(
 
 userRouter.get("/all-product", allProduct);
 
+userRouter.get('/plans', authenticateToken, fetchAllPlans);
+
+// AI Related Routers
+userRouter.post("/test-bambani-order", authenticateToken, getOrder);
+
+userRouter.get("/track-order", authenticateToken, trackOrderC);
+
 userRouter.post("/try-on", generateBabyTryOn);
+
+userRouter.post("/create-baby-modal", uploadUserAvatar.single("BabyModalImage"), generateBabyTryOnModal);
 
 module.exports = userRouter;

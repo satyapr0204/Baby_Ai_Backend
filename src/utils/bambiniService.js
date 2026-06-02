@@ -136,6 +136,7 @@ const fetch = require("node-fetch");
 const xml2js = require("xml2js");
 const Order = require("../modals/orderModal");
 const Address = require("../modals/addressModal");
+const { default: axios } = require("axios");
 
 function buildXml(rootName, data) {
   const builder = new xml2js.Builder({
@@ -160,7 +161,7 @@ const createOrder = async (orderId, userData) => {
       },
     ],
   });
-  
+
   const key = "45GLHF538F5VIXEZ";
   const email = "jayfisher901@gmail.com";
 
@@ -188,39 +189,54 @@ const createOrder = async (orderId, userData) => {
   };
   const cartXml = buildXml("cart", cartData);
 
-  const authHeader =
-    "Basic " + Buffer.from(`${email}:${key}`).toString("base64");
+  const authHeader = Buffer.from(`${email}:${key}`).toString("base64");
 
   const formData = new URLSearchParams();
   formData.append("address", addressXml);
   formData.append("cart", cartXml);
 
+  console.log("authHeader", authHeader);
+
   try {
-    const response = await fetch(
+    // const response = await fetch(
+    //   "https://www.bambinilayette.com/webservices/order.php",
+    //   {
+    //     method: "POST",
+    //     headers: {
+    //       Authorization: authHeader,
+    //       "Content-Type": "application/x-www-form-urlencoded",
+    //     },
+    //     body: formData,
+    //   },
+    // );
+    // console.log("response", response);
+    // const httpcode = response.status;
+    // const responseText = await response.text();
+
+    const response = await axios.post(
       "https://www.bambinilayette.com/webservices/order.php",
+      formData.toString(),
       {
-        method: "POST",
         headers: {
-          Authorization: authHeader,
+          Authorization: `Basic ${authHeader}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: formData,
       },
     );
 
+    const result = response.data;
     const httpcode = response.status;
-    const responseText = await response.text();
 
-    let result;
-    try {
-      result = JSON.parse(responseText);
-    } catch (e) {
-      return {
-        status: false,
-        message: "Invalid JSON response",
-        raw: responseText,
-      };
-    }
+    // let result;
+    // try {
+    //   result = JSON.parse(responseText);
+    // } catch (e) {
+    //   return {
+    //     status: false,
+    //     message: "Invalid JSON response",
+    //     raw: responseText,
+    //   };
+    // }
 
     if (result.errors && result.errors.length > 0) {
       return {
@@ -242,6 +258,7 @@ const createOrder = async (orderId, userData) => {
       raw: result,
     };
   } catch (error) {
+    // console.log("Error on bambani", error);
     return { status: false, message: error.message };
   }
 };
@@ -258,31 +275,45 @@ const trackOrder = async () => {
   formData.append("orders", orders);
 
   try {
-    const response = await fetch(
-      "https://www.bambinilayette.com/webservices/ordertracking.php",
+    // const response = await fetch(
+    //   "https://www.bambinilayette.com/webservices/ordertracking.php",
+    //   {
+    //     method: "POST",
+    //     headers: {
+    //       Authorization: authHeader,
+    //       "Content-Type": "application/x-www-form-urlencoded",
+    //     },
+    //     body: formData,
+    //   },
+    // );
+
+    // const httpcode = response.status;
+    // const responseText = await response.text();
+
+     const response = await axios.post(
+      "https://www.bambinilayette.com/webservices/order.php",
+      formData.toString(),
       {
-        method: "POST",
         headers: {
-          Authorization: authHeader,
+          Authorization: `Basic ${authHeader}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: formData,
       },
     );
 
+    const result = response.data;
     const httpcode = response.status;
-    const responseText = await response.text();
 
-    let result;
-    try {
-      result = JSON.parse(responseText);
-    } catch (e) {
-      return {
-        status: false,
-        message: "Invalid JSON response",
-        raw: responseText,
-      };
-    }
+    // let result;
+    // try {
+    //   result = JSON.parse(responseText);
+    // } catch (e) {
+    //   return {
+    //     status: false,
+    //     message: "Invalid JSON response",
+    //     raw: responseText,
+    //   };
+    // }
 
     if (result.errors && result.errors.length > 0) {
       return {

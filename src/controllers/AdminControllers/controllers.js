@@ -1,4 +1,5 @@
 const Admin = require("../../modals/adminsModal");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { sendResponse } = require("../../utils/coustomResponse");
@@ -23,86 +24,9 @@ const Retailer = require("../../modals/ProductModal/retailer");
 const Fabric = require("../../modals/ProductModal/fabric");
 const Color = require("../../modals/ProductModal/color");
 const Plan = require("../../modals/planModal");
-// const ExcelJS = require('exceljs');
-
-// const processBabyData = async (data) => {
-//   if (!data) return data;
-
-//   const isArray = Array.isArray(data);
-//   let users = isArray ? data : [data];
-
-//   users = users.map((u) => (typeof u.toJSON === "function" ? u.toJSON() : u));
-
-//   let fabricIds = new Set();
-//   let colorIds = new Set();
-
-//   const parseIds = (val) => {
-//     try {
-//       const p = typeof val === "string" ? JSON.parse(val || "[]") : val;
-//       return Array.isArray(p) ? p : [];
-//     } catch {
-//       return [];
-//     }
-//   };
-
-//   users.forEach((user) => {
-//     user.babies?.forEach((baby) => {
-//       parseIds(baby.fabric_preferences).forEach((id) =>
-//         fabricIds.add(id.toString()),
-//       );
-//       parseIds(baby.preferred_colors).forEach((id) =>
-//         colorIds.add(id.toString()),
-//       );
-//     });
-//   });
-
-//   const [fabrics, colors] = await Promise.all([
-//     fabricIds.size > 0
-//       ? Fabric.findAll({
-//           where: { id: Array.from(fabricIds) },
-//           attributes: ["id", "name"],
-//         })
-//       : [],
-//     colorIds.size > 0
-//       ? Color.findAll({
-//           where: { id: Array.from(colorIds) },
-//           attributes: ["id", "name"],
-//         })
-//       : [],
-//   ]);
-
-//   const fabricMap = Object.fromEntries(
-//     fabrics.map((f) => [f.id.toString(), f.name]),
-//   );
-//   const colorMap = Object.fromEntries(
-//     colors.map((c) => [c.id.toString(), c.name]),
-//   );
-
-//   users.forEach((user) => {
-//     if (user.babies) {
-//       user.babies = user.babies.map((baby) => {
-//         if (
-//           baby.baby_profile_image &&
-//           !baby.baby_profile_image.startsWith("http")
-//         ) {
-//           baby.baby_profile_image = `${process.env.BACKEND_URL}/baby-image/${baby.baby_profile_image}`;
-//         }
-
-//         const fIds = parseIds(baby.fabric_preferences);
-//         baby.fabric_preferences = fIds.map(
-//           (id) => fabricMap[id.toString()] || id,
-//         );
-
-//         const cIds = parseIds(baby.preferred_colors);
-//         baby.preferred_colors = cIds.map((id) => colorMap[id.toString()] || id);
-
-//         return baby;
-//       });
-//     }
-//   });
-
-//   return isArray ? users : users[0];
-// };
+const Order = require("../../modals/orderModal");
+const Address = require("../../modals/addressModal");
+const Transaction = require("../../modals/transactionModal");
 
 const processBabyData = async (data) => {
   if (!data) return data;
@@ -415,22 +339,6 @@ const addAlertMessage = async (req, res, next) => {
     next(error);
   }
 };
-
-// const fetchAllFlashMessages = async (req, res, next) => {
-//   try {
-//     const flashMessages = await FlashMessage.findAll();
-
-//     if (flashMessages.length === 0)
-//       throw new CoustomError("No flash messages found", 404);
-
-//     sendResponse(res, "Flash messages retrieved successfully!", 200, {
-//       flashMessages,
-//     });
-
-//   } catch (error) {
-//     next(error);
-//   }
-// };
 
 const fetchAllFlashMessages = async (req, res, next) => {
   try {
@@ -862,7 +770,7 @@ const deleteFaq = async (req, res, next) => {
 
 const createStaticPage = async (req, res, next) => {
   try {
-    const { title, content } = req.body;
+    const { title, content, key } = req.body;
     const isExistingPage = await StaticPage.findOne({
       where: {
         title,
@@ -877,6 +785,7 @@ const createStaticPage = async (req, res, next) => {
     const newPage = await StaticPage.create({
       title,
       content,
+      key,
     });
     sendResponse(res, "Static page created successfully!", 201, {
       page: newPage,
@@ -888,7 +797,7 @@ const createStaticPage = async (req, res, next) => {
 
 const updateStaticPageData = async (req, res, next) => {
   try {
-    const { id, title, content } = req.body;
+    const { id, title, content, key } = req.body;
     const page = await StaticPage.findOne({
       where: {
         id,
@@ -900,6 +809,7 @@ const updateStaticPageData = async (req, res, next) => {
     await page.update({
       title: title ? title : page.title,
       content: content ? content : page.content,
+      key: key ? key : page.key,
     });
 
     sendResponse(res, "Static page updated successfully!", 200, { page });
@@ -919,52 +829,6 @@ const allStaticPages = async (req, res, next) => {
     next(error);
   }
 };
-
-// const allCategories = async (req, res, next) => {
-//   try {
-//     const categories = await Category.findAll({
-//       attributes: {
-//         include: [
-//           [
-//             sequelize.literal(`(
-//               SELECT COUNT(*)
-//               FROM products AS p
-//               WHERE p.category_id = Category.id
-//               AND p.sale_price > 0
-//             )`),
-//             "total_products",
-//           ],
-//           [
-//             sequelize.literal(`(
-//               SELECT IFNULL(SUM(p.sale_price), 0)
-//               FROM products AS p
-//               WHERE p.category_id = Category.id
-//             )`),
-//             "total_cost",
-//           ],
-//           [
-//             sequelize.literal(`(
-//               SELECT COUNT(*)
-//               FROM RetailerCategories AS rc
-//               WHERE rc.category_id = Category.id
-//             )`),
-//             "total_retailers",
-//           ],
-//         ],
-//       },
-//       order: [["id", "ASC"]],
-//     });
-//     if (!categories || categories.length === 0) {
-//       throw new CoustomError("No categories found", 404);
-//     }
-//     if (!categories) throw new CoustomError("No categories found", 404);
-//     sendResponse(res, "Categories retrieved successfully!", 200, {
-//       categories,
-//     });
-//   } catch (error) {
-//     next(error);
-//   }
-// };
 
 const allCategories = async (req, res, next) => {
   try {
@@ -1014,96 +878,6 @@ const allCategories = async (req, res, next) => {
     if (!categories || categories.length === 0) {
       throw new CoustomError("No categories found", 404);
     }
-
-    // const updatedCategories = categories.map((cat) => {
-    //   const categoryData = cat.toJSON();
-    //   const categoryId = categoryData.id;
-    //   categoryData.retailer_addon = "0";
-    //   categoryData.retailer_discount = "0";
-    //   categoryData.retailer_margin = "0";
-    //   if (
-    //     parseFloat(categoryData.addon_percentage) === 0 &&
-    //     parseFloat(categoryData.discount_percentage) === 0
-    //   ) {
-    //     if (categoryData.retailers && categoryData.retailers.length > 0) {
-    //       let retailerSelected = categoryData.retailers[0].selected_categories;
-
-    //       if (typeof retailerSelected === "string") {
-    //         try {
-    //           retailerSelected = JSON.parse(retailerSelected);
-    //         } catch (e) {
-    //           retailerSelected = [];
-    //         }
-    //       }
-    //       const validRetailer =
-    //         Array.isArray(retailerSelected) &&
-    //         retailerSelected.includes(categoryId);
-    //       if (validRetailer) {
-
-    //         categoryData.retailer_addon = `${parseFloat(categoryData.retailers[0].addon_percentage)}`;
-    //         categoryData.retailer_discount = `${parseFloat(categoryData.retailers[0].discount)}`;
-    //         const { status, marginPct, marginAmt } = calculateSafeMargin(
-    //           categoryData.total_cost,
-    //           categoryData.retailer_addon,
-    //           categoryData.retailer_discount,
-    //         );
-    //         categoryData.retailer_margin = `${marginPct}` || 0;
-
-    //       }
-    //     }
-    //   } else {
-    //     categoryData.retailer_addon = "0";
-    //     categoryData.retailer_discount = "0";
-    //     categoryData.retailer_margin = "0";
-    //   }
-    //   delete categoryData.retailers;
-    //   return categoryData;
-    // });
-
-    // const updatedCategories = categories.map((cat) => {
-    //   const categoryData = cat.toJSON();
-    //   const categoryId = categoryData.id;
-    //   let finalAddon = categoryData.addon_percentage;
-    //   let finalDiscount = categoryData.discount_percentage;
-    //   let finalMargin = categoryData.total_margin;
-
-    //   if (categoryData.retailers && categoryData.retailers.length > 0) {
-    //     let retailerSelected = categoryData.retailers[0].selected_categories;
-
-    //     if (typeof retailerSelected === "string") {
-    //       try {
-    //         retailerSelected = JSON.parse(retailerSelected);
-    //       } catch (e) {
-    //         retailerSelected = [];
-    //       }
-    //     }
-
-    //     const isRetailerValid =
-    //       Array.isArray(retailerSelected) &&
-    //       retailerSelected.includes(categoryId);
-
-    //     if (
-    //       isRetailerValid &&
-    //       parseInt(categoryData.is_retailor_price_active) === 1
-    //     ) {
-    //       finalAddon = categoryData.retailers[0].addon_percentage;
-    //       finalDiscount = categoryData.retailers[0].discount;
-
-    //       const { status, marginPct, marginAmt } = calculateSafeMargin(
-    //         categoryData.total_cost,
-    //         finalAddon,
-    //         finalDiscount,
-    //       );
-    //       finalMargin = marginPct;
-    //     }
-    //   }
-    //   categoryData.retailer_addon = `${parseFloat(finalAddon)}`;
-    //   categoryData.retailer_discount = `${parseFloat(finalDiscount)}`;
-    //   categoryData.retailer_margin = `${finalMargin}`;
-
-    //   delete categoryData.retailers;
-    //   return categoryData;
-    // });
 
     const updatedCategories = categories.map((cat) => {
       const categoryData = cat.toJSON();
@@ -1158,6 +932,7 @@ const allCategories = async (req, res, next) => {
     next(error);
   }
 };
+
 const resetRetailorPrice = async (req, res, next) => {
   try {
     const { id } = req.body;
@@ -1334,67 +1109,6 @@ const addBanner = async (req, res, next) => {
   }
 };
 
-// const updateBanner = async (req, res, next) => {
-//   try {
-//     const {
-//       id,
-//       location,
-//       priority,
-//       heading,
-//       description,
-//       cta_button_text,
-//       redirection_link,
-//       start_offer_date,
-//       end_offer_date,
-//     } = req.body;
-//     const banner = await Banner.findOne({
-//       where: { id, is_delete: 0 },
-//     });
-
-//     if (!banner) {
-//       if (req.file) await fs.unlink(req.file.path);
-//       throw new CoustomError("Banner not found", 404);
-//     }
-
-//     const oldBannerPath = banner.banner_url;
-//     const newBannerUrl = req.file ? req.file.filename : banner.banner_url;
-
-//     try {
-//       await banner.update({
-//         location: location ? location : banner.location,
-//         priority: priority ? priority : banner.priority,
-//         heading: heading ? heading : banner.heading,
-//         description: description ? description : banner.description,
-//         cta_button_text: cta_button_text
-//           ? cta_button_text
-//           : banner.cta_button_text,
-//         redirection_link: redirection_link
-//           ? redirection_link
-//           : banner.redirection_link,
-//         start_offer_date: start_offer_date
-//           ? start_offer_date
-//           : banner.start_offer_date,
-//         end_offer_date: end_offer_date ? end_offer_date : banner.end_offer_date,
-//         banner_url: newBannerUrl,
-//       });
-//       if (req.file && oldBannerPath) {
-//         const fullPath = path.join(__dirname, "../../Banners", oldBannerPath);
-//         await fs
-//           .unlink(fullPath)
-//           .catch((err) => console.log("Old file not found, skipping delete"));
-//       }
-//       sendResponse(res, "Banner updated successfully!", 200, { banner });
-//     } catch (dbError) {
-//       if (req.file) {
-//         await fs.unlink(req.file.path);
-//       }
-//       throw dbError;
-//     }
-//   } catch (error) {
-//     next(error);
-//   }
-// };
-
 const updateBanner = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
@@ -1511,84 +1225,6 @@ const allBanners = async (req, res, next) => {
     next(error);
   }
 };
-
-// const retailersData = async (req, res, next) => {
-//   try {
-//     const retailersList = await Retailer.findAll({
-//       attributes: {
-//         include: [
-//           [
-//             sequelize.literal(`(
-//           SELECT IFNULL(SUM(p.sale_price), 0)
-//           FROM products AS p
-//           WHERE p.retailer_id = Retailer.id
-//           AND p.sale_price > 0
-//         )`),
-//             "total_cost",
-//           ],
-//           [
-//             sequelize.literal(`(
-//               SELECT COUNT(*)
-//               FROM products AS p
-//               WHERE p.retailer_id = Retailer.id
-//               AND p.sale_price > 0
-//             )`),
-//             "total_products",
-//           ],
-//         ],
-//       },
-//       include: [
-//         {
-//           model: Category,
-//           as: "categories",
-//           through: {
-//             attributes: [],
-//           },
-//         },
-//         {
-//           model: Product,
-//           as: "retailers",
-//           attributes: ["id"],
-//           where: {
-//             sale_price: { [Op.gt]: 0 },
-//           },
-//           required: false,
-//         },
-//       ],
-//     });
-
-//     if (!retailersList || retailersList.length === 0) {
-//       throw new CoustomError("No retailers data found", 404);
-//     }
-
-//     const formattedData = retailersList.map((retailer) => {
-//       const plainRetailer = retailer.get({ plain: true });
-
-//       console.log("plainRetailer", plainRetailer.retailers);
-
-//       const totalCategories = plainRetailer.categories
-//         ? plainRetailer.categories.length
-//         : 0;
-//       const totalProducts = plainRetailer.retailers
-//         ? plainRetailer.retailers.length
-//         : 0;
-
-//       delete plainRetailer.category_ids;
-//       delete plainRetailer.retailers;
-//       return {
-//         ...plainRetailer,
-//         total_categories: totalCategories,
-//         total_products: totalProducts,
-//       };
-//     });
-
-//     sendResponse(res, "Retailers data retrieved successfully!", 200, {
-//       retailers: formattedData,
-//     });
-//   } catch (error) {
-//     next(error);
-//   }
-// };
 
 const retailersData = async (req, res, next) => {
   try {
@@ -1710,36 +1346,83 @@ const getAllOrderData = async (req, res, next) => {
       where: { is_active: 1, is_delete: 0 },
       raw: true,
     });
-    const orders = users.map((user, index) => {
-      const fullName = `${user.name || ""} `.trim() || "Unknown User";
-      const user_id = user.id;
 
-      return {
-        s_no: index + 1,
-        order_id: `#ORD-${+index}`,
-        retailer_name: "Emily Smith",
-        product_id: index + 1,
-        track_id: index + 1,
-        retailer_id: `1`,
-        user_name: fullName,
-        user_id: user_id,
-        product_name: "T-Shirt",
-        quantity: Math.floor(Math.random() * 5) + 1,
-        amount: `$${(Math.random() * 500 + 100).toFixed(2)}`,
-        shipping_address:
-          "26, Duong So 2, Thao Dien Ward, An Phu, District 2, Ho Chi Minh city",
-        payment_method: "Credit Card",
-        delivery_status:
-          index % 3 === 0
-            ? "Delivered"
-            : index % 3 === 1
-              ? "In Transit"
-              : "Cancelled (By Admin)",
-        return_details: "--",
-        return_reason: index % 5 === 0 ? "Size not fit" : "--",
-        order_date: "2026-04-16T09:40:26.000Z",
-        delivered_date: index % 3 === 0 ? "2026-04-22T09:40:26.000Z" : "--",
-      };
+    const getAllOrdersForAdmin = async () => {
+      let orders = await Order.findAll({
+        include: [
+          { model: User, as: "user", attributes: ["id", "name", "email"] },
+          { model: Address, as: "order_address" },
+        ],
+        raw: true,
+        nest: true,
+      });
+
+      const productIds = [
+        ...new Set(
+          orders.flatMap((order) => {
+            const items =
+              typeof order.items === "string"
+                ? JSON.parse(order.items)
+                : order.items;
+            return items.map((item) => item.product_id);
+          }),
+        ),
+      ];
+      const productsWithRetailers = await Product.findAll({
+        where: { id: productIds },
+        include: [{ model: Retailer, as: "retailers" }],
+        raw: true,
+        nest: true,
+      });
+
+      const finalData = orders.map((order) => {
+        const orderItems =
+          typeof order.items === "string"
+            ? JSON.parse(order.items)
+            : order.items;
+
+        const detailedItems = orderItems.map((item) => {
+          const productInfo = productsWithRetailers.find(
+            (p) => p.id == item.product_id,
+          );
+          return {
+            ...item,
+            productDetails: productInfo || null,
+          };
+        });
+
+        return { ...order, items: detailedItems };
+      });
+
+      return finalData;
+    };
+    let orderData = await getAllOrdersForAdmin();
+    // console.log("orderData",orderData)
+    const formattedOrders = orderData.flatMap((order, orderIndex) => {
+      return order.items.map((item, itemIndex) => {
+        const productDetails = item.productDetails || {};
+
+        return {
+          id: order.id,
+          order_id: `#${order.order_id}`,
+          retailer_name: productDetails.retailers?.name || "N/A",
+          product_id: item.product_id,
+          track_id: order.id,
+          retailer_id: String(productDetails.retailer_id || ""),
+          user_name: order.user?.name || "N/A",
+          user_id: order.user_id,
+          product_name: item.product_name,
+          quantity: item.quantity,
+          amount: `$${item.subtotal || item.price}`,
+          shipping_address: order.shipping_address || "N/A",
+          payment_method: order.payment_method,
+          delivery_status: order.order_status,
+          return_details: order.is_returned === 1 ? "Returned" : "--",
+          return_reason: order.reason || "--",
+          order_date: order.order_date,
+          delivered_date: order.delivery_date || "--",
+        };
+      });
     });
 
     sendResponse(
@@ -1747,8 +1430,8 @@ const getAllOrderData = async (req, res, next) => {
       "Orders fetched with real user names and dummy data",
       200,
       {
-        count: orders.length,
-        orders: orders,
+        count: formattedOrders.length,
+        orders: formattedOrders,
       },
     );
   } catch (error) {
@@ -1757,44 +1440,141 @@ const getAllOrderData = async (req, res, next) => {
   }
 };
 
+// const getAllTransactions = async (req, res, next) => {
+//   try {
+//     const users = await User.findAll({
+//       attributes: ["name", "id"],
+//       where: { is_active: 1, is_delete: 0 },
+//       raw: true,
+//     });
+
+//     const transactions = users.map((user, index) => {
+//       const fullName = `${user.name || ""}`.trim() || "Guest User";
+//       const user_id = user.id;
+//       const pMethods = ["ATM Card", "Credit Card", "Debit Card"];
+//       const statuses = ["Successful", "Pending", "Failed"];
+//       const products = ["T-Shirt", "Jeans", "T-Shirts"];
+
+//       return {
+//         s_no: index + 1,
+//         transaction_id: `#ID-12345`,
+//         retailer_name: "Emily Smith",
+//         user_name: fullName,
+//         user_id: user_id,
+//         shipping_address:
+//           "26, Duong So 2, Thao Dien Ward, An Phu, District 2, Ho Chi Minh city",
+//         payment_method: pMethods[index % 3],
+//         status: statuses[index % 3],
+//         product: products[index % 3],
+//         quantity: index + 1,
+//         order_date: `2026-04-0${index + 1}T09:40:26.000Z`,
+//         delivered_date: "2026-02-12T09:40:26.000Z",
+//         amount: "$400",
+//       };
+//     });
+
+//     sendResponse(res, "Transactions fetched successfully", 200, {
+//       count: transactions.length,
+//       transactions: transactions,
+//     });
+//   } catch (error) {
+//     console.error("Error in getAllTransactionData:", error);
+//     next(error);
+//   }
+// };
+
 const getAllTransactions = async (req, res, next) => {
   try {
-    const users = await User.findAll({
-      attributes: ["name", "id"],
-      where: { is_active: 1, is_delete: 0 },
-      raw: true,
+    const data = await Transaction.findAll({
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "name"],
+        },
+        {
+          model: Order,
+          as: "order",
+          attributes: [
+            "shipping_address",
+            "quantity",
+            "order_date",
+            "delivery_date",
+            "items",
+          ],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
     });
 
-    const transactions = users.map((user, index) => {
-      const fullName = `${user.name || ""}`.trim() || "Guest User";
-      const user_id = user.id;
-      const pMethods = ["ATM Card", "Credit Card", "Debit Card"];
-      const statuses = ["Successful", "Pending", "Failed"];
-      const products = ["T-Shirt", "Jeans", "T-Shirts"];
-      return {
-        s_no: index + 1,
-        transaction_id: `#ID-12345`,
-        retailer_name: "Emily Smith",
-        user_name: fullName,
-        user_id: user_id,
-        shipping_address:
-          "26, Duong So 2, Thao Dien Ward, An Phu, District 2, Ho Chi Minh city",
-        payment_method: pMethods[index % 3],
-        status: statuses[index % 3],
-        product: products[index % 3],
-        quantity: 1,
-        order_date: `2026-04-0${index + 1}T09:40:26.000Z`,
-        delivered_date: "2026-02-12T09:40:26.000Z",
-        amount: "$400",
-      };
-    });
+    const transactions = await Promise.all(
+      data.map(async (item, index) => {
+        const user = item.user || {};
+        const order = item.order || {};
 
+        let productName = "N/A";
+        let retailerName = "N/A";
+        let parsedItems = [];
+
+        try {
+          parsedItems =
+            typeof order.items === "string"
+              ? JSON.parse(order.items)
+              : order.items || [];
+
+          if (parsedItems.length > 0) {
+            const firstItem = parsedItems[0];
+            productName = firstItem.product_name || "Product";
+
+            if (firstItem.product_id || firstItem.id) {
+              const productData = await Product.findOne({
+                where: { id: firstItem.product_id || firstItem.id },
+                include: [
+                  {
+                    model: Retailer,
+                    as: "retailers",
+                    attributes: ["name"],
+                  },
+                ],
+              });
+
+              if (productData && productData.retailers) {
+                retailerName = productData.retailers.name;
+              }
+            }
+          }
+        } catch (e) {
+          console.error(
+            "Parsing/Fetching error for Order ID:",
+            order.id,
+            e.message,
+          );
+        }
+
+        return {
+          s_no: index + 1,
+          id: item.id,
+          transaction_id: item.transaction_id || `#ID-${item.id}`,
+          retailer_name: retailerName,
+          user_name: user.name || "Guest User",
+          user_id: user.id || null,
+          shipping_address: order.shipping_address || "Address Not Found",
+          payment_method: item.payment_method || "N/A",
+          status: item.status || "Pending",
+          product: productName,
+          quantity: order.quantity || 0,
+          order_date: order.order_date,
+          delivered_date: order.delivery_date || "--",
+          amount: `$${item.amount || 0}`,
+        };
+      }),
+    );
     sendResponse(res, "Transactions fetched successfully", 200, {
       count: transactions.length,
       transactions: transactions,
     });
   } catch (error) {
-    console.error("Error in getAllTransactionData:", error);
+    console.error("Error in getAllTransactions:", error);
     next(error);
   }
 };
@@ -1815,10 +1595,20 @@ const getAllData = async (req, res, next) => {
 
 const fetchAllPlans = async (req, res, next) => {
   try {
+    let whereCondition = {};
+    if (req.user.is_admin !== 1) {
+      whereCondition.is_active = 1;
+    }
     const allPlans = await Plan.findAll({
-      // where: {
-      //   // is_active: 1,
-      // },
+      where: whereCondition,
+      attributes: {
+        exclude: [
+          "createdAt",
+          "updatedAt",
+          "stripe_price_id",
+          "stripe_product_id",
+        ],
+      },
     });
     const formattedPlans = allPlans.map((plan) => {
       const planData = plan.get({ plain: true });
@@ -1861,11 +1651,25 @@ const fetchAllPlans = async (req, res, next) => {
 const createNewPlane = async (req, res, next) => {
   try {
     const { plan_name, duraction, price, features } = req.body;
+    let currency = "usd";
+    const product = await stripe.products.create({
+      name: plan_name,
+      default_price_data: {
+        currency: currency,
+        recurring: {
+          interval: duraction,
+        },
+        unit_amount: Number(price) * 100,
+      },
+    });
+
     await Plan.create({
       plan_name,
       duraction,
       price,
       features,
+      stripe_price_id: product.default_price,
+      stripe_product_id: product.id,
     });
 
     sendResponse(res, "Plan has been created successfully", 201);
@@ -1895,6 +1699,29 @@ const updatePlan = async (req, res, next) => {
     });
 
     sendResponse(res, "Your plan has been updated successfully", 200);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const cancelOrder = async (req, res, next) => {
+  try {
+    const { id, reason } = req.body;
+    const orderData = await Order.findOne({
+      where: {
+        id,
+        is_returned: 0,
+      },
+    });
+    if (!orderData) {
+      throw new CoustomError("Order not found or already returned", 404);
+    }
+    await orderData.update({
+      is_cancelled: 1,
+      order_status: "Cancelled",
+      reason: reason || "Cancelled by admin",
+    });
+    sendResponse(res, "Order has been cancelled successfully!", 200);
   } catch (error) {
     next(error);
   }
@@ -1940,4 +1767,5 @@ module.exports = {
   fetchAllPlans,
   createNewPlane,
   updatePlan,
+  cancelOrder,
 };

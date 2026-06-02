@@ -2,6 +2,7 @@ const { DataTypes } = require("sequelize");
 const { sequelize } = require("../../dbConfig.js");
 const User = require("./userModal.js");
 const Order = require("./orderModal.js");
+const Subscriber = require("./subscriberModal.js");
 
 const Transaction = sequelize.define(
   "Transaction",
@@ -46,6 +47,8 @@ const Transaction = sequelize.define(
 
 Transaction.belongsTo(User, { as: "user", foreignKey: "user_id" });
 Transaction.belongsTo(Order, { as: "order", foreignKey: "order_id" });
+Transaction.belongsTo(Subscriber, { as: "subscription", foreignKey: "subscription_id" });
+Subscriber.hasOne(Transaction, { as: "subscription", foreignKey: "subscription_id" });
 Order.hasOne(Transaction, { as: "transaction", foreignKey: "order_id" });
 
 (async () => {
