@@ -67,6 +67,10 @@ const Order = sequelize.define(
       type: DataTypes.STRING,
       defaultValue: null,
     },
+    cancellation_comment: {
+      type: DataTypes.STRING,
+      defaultValue: null,
+    },
   },
   {
     tableName: "orders",

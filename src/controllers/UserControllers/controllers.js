@@ -2285,7 +2285,7 @@ const applayFilters = async (req, res, next) => {
     if (color?.length) productWhere.color_id = { [Op.in]: color };
     if (size?.length) productWhere.size_id = { [Op.in]: size };
 
-    let products = await getCalculatedProducts({
+    let products = await getCalculatedProductsWithSuffling({
       category_id,
       user_id,
       productWhereData: productWhere,
@@ -3119,22 +3119,22 @@ const buyAgain = async (req, res, next) => {
 
     const formattedOrderData = baseOrderData
       ? {
-          ...baseOrderData.toJSON(),
-          items: undefined,
-          order_id: undefined,
-          total_amount: `${baseOrderData.total_amount}`,
-          payment_method: undefined,
-          shipping_address: fullAddressText,
-          order_address: undefined,
-          shipping_address_id:
-            baseOrderData?.order_address?.id ?? defaultAddress?.id ?? null,
-        }
+        ...baseOrderData.toJSON(),
+        items: undefined,
+        order_id: undefined,
+        total_amount: `${baseOrderData.total_amount}`,
+        payment_method: undefined,
+        shipping_address: fullAddressText,
+        order_address: undefined,
+        shipping_address_id:
+          baseOrderData?.order_address?.id ?? defaultAddress?.id ?? null,
+      }
       : {
-          shipping_address: fullAddressText,
-          total_amount: `${formattedProducts[0].sale_price}`,
-          shipping_address_id:
-            baseOrderData?.order_address?.id ?? defaultAddress?.id ?? null,
-        };
+        shipping_address: fullAddressText,
+        total_amount: `${formattedProducts[0].sale_price}`,
+        shipping_address_id:
+          baseOrderData?.order_address?.id ?? defaultAddress?.id ?? null,
+      };
 
     sendResponse(res, "Data fetched successfully", 200, {
       orders: formattedOrderData,
@@ -3569,13 +3569,7 @@ const fetchOrderDetails = async (req, res, next) => {
 
       delivery_address: delivery_address,
       payment_method: order.payment_method || "N/A",
-
-      // tracking_details: {
-      //   tracking_id: order.tracking_id || "N/A",
-      //   estimated_delivery_date: order.estimated_delivery_date || "N/A"
-      // },
-
-      // action_flags: action_flags
+      tracking_url: "https://mern.yilstaging.com/" || null,
     };
 
     sendResponse(res, "Order summary fetched successfully", 200, finalData);
@@ -3625,7 +3619,7 @@ const fetchOrderDetails = async (req, res, next) => {
 const cancelMyOrder = async (req, res, next) => {
   try {
     const user_id = req.user.id;
-    const { id, reason } = req.body;
+    const { id, reason, cancellation_comment } = req.body;
     const order = await Order.findOne({
       where: {
         id,
@@ -3640,6 +3634,7 @@ const cancelMyOrder = async (req, res, next) => {
       is_cancelled: 1,
       order_status: "Cancelled",
       reason: reason || "No reason provided",
+      cancellation_comment: cancellation_comment || "No comment provided",
     });
     sendResponse(res, "Order cancelled successfully", 200);
   } catch (error) {
@@ -3712,7 +3707,8 @@ const getRecommendedProduct = async (req, res, next) => {
     const allSize = await Size.findAll();
 
     const predictedProduct = await axios.post(
-      "http://localhost:5000/api/predict-size",
+      // "http://localhost:5000/api/predict-size",
+      process.env.SIZE_PREDICTION_SERVICE_URL,
       {
         image_width,
         image_height,
