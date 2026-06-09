@@ -80,6 +80,7 @@
     "parseurl": "^1.3.3",
     "path": "^0.12.7",
     "path-to-regexp": "^8.4.0",
+    "pm2": "^7.0.1",
     "proxy-addr": "^2.0.7",
     "proxy-from-env": "^1.1.0",
     "range-parser": "^1.2.1",

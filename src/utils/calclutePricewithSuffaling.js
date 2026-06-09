@@ -220,52 +220,102 @@ const getCalculatedProductsWithSuffling = async ({
     });
     const groupedProductsMap = new Map();
 
+    // calculatedList.forEach((prod) => {
+    //   const productNameKey = prod.product_name
+    //     ? prod.product_name.trim().toLowerCase()
+    //     : `unknown_${prod.id}`;
+
+    //   if (!groupedProductsMap.has(productNameKey)) {
+    //     const newProductGroup = {
+    //       ...prod,
+    //       sizes: prod.size
+    //         ? [
+    //             {
+    //               id: prod.size.id,
+    //               name: Array.isArray(prod.size.name)
+    //                 ? prod.size.name[0]
+    //                 : prod.size.name,
+    //               product_id: prod.id,
+    //             },
+    //           ]
+    //         : [],
+    //     };
+    //     delete newProductGroup.size;
+    //     groupedProductsMap.set(productNameKey, newProductGroup);
+    //   } else {
+    //     const existingProduct = groupedProductsMap.get(productNameKey);
+    //     if (requestedId && Number(prod.id) === Number(requestedId)) {
+    //       const currentSizes = existingProduct.sizes;
+    //       Object.assign(existingProduct, prod);
+    //       existingProduct.sizes = currentSizes;
+    //       delete existingProduct.size;
+    //     }
+    //     if (prod.size) {
+    //       const sizeExists = existingProduct.sizes.some(
+    //         (s) => s.id === prod.size.id,
+    //       );
+    //       if (!sizeExists) {
+    //         existingProduct.sizes.push({
+    //           id: prod.size.id,
+    //           name: Array.isArray(prod.size.name)
+    //             ? prod.size.name[0]
+    //             : prod.size.name,
+    //           product_id: prod.id,
+    //         });
+    //       }
+    //     }
+    //   }
+    // });
+
     calculatedList.forEach((prod) => {
       const productNameKey = prod.product_name
         ? prod.product_name.trim().toLowerCase()
         : `unknown_${prod.id}`;
 
+      const isRequestedProduct = requestedId && Number(prod.id) === Number(requestedId);
+      const sizeObj = prod.size
+        ? {
+            id: prod.size.id,
+            name: Array.isArray(prod.size.name) ? prod.size.name[0] : prod.size.name,
+            product_id: prod.id,
+          }
+        : null;
+
       if (!groupedProductsMap.has(productNameKey)) {
         const newProductGroup = {
           ...prod,
-          sizes: prod.size
-            ? [
-                {
-                  id: prod.size.id,
-                  name: Array.isArray(prod.size.name)
-                    ? prod.size.name[0]
-                    : prod.size.name,
-                  product_id: prod.id,
-                },
-              ]
-            : [],
+          sizes: sizeObj ? [sizeObj] : [],
         };
         delete newProductGroup.size;
         groupedProductsMap.set(productNameKey, newProductGroup);
       } else {
         const existingProduct = groupedProductsMap.get(productNameKey);
-        if (requestedId && Number(prod.id) === Number(requestedId)) {
+        if (isRequestedProduct) {
           const currentSizes = existingProduct.sizes;
           Object.assign(existingProduct, prod);
           existingProduct.sizes = currentSizes;
           delete existingProduct.size;
         }
-        if (prod.size) {
-          const sizeExists = existingProduct.sizes.some(
-            (s) => s.id === prod.size.id,
-          );
+        if (sizeObj) {
+          const sizeExists = existingProduct.sizes.some((s) => s.id === sizeObj.id);
           if (!sizeExists) {
-            existingProduct.sizes.push({
-              id: prod.size.id,
-              name: Array.isArray(prod.size.name)
-                ? prod.size.name[0]
-                : prod.size.name,
-              product_id: prod.id,
-            });
+            if (isRequestedProduct) {
+              existingProduct.sizes.unshift(sizeObj);
+            } else {
+              existingProduct.sizes.push(sizeObj);
+            }
+          } else if (isRequestedProduct) {
+            const existingIndex = existingProduct.sizes.findIndex((s) => s.id === sizeObj.id);
+            if (existingIndex > 0) {
+              const [movedSize] = existingProduct.sizes.splice(existingIndex, 1);
+              existingProduct.sizes.unshift(movedSize);
+            }
           }
         }
       }
     });
+
+
 
     let result = Array.from(groupedProductsMap.values());
 

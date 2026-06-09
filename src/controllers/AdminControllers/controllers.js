@@ -1390,7 +1390,6 @@ const getAllOrderData = async (req, res, next) => {
             productDetails: productInfo || null,
           };
         });
-
         return { ...order, items: detailedItems };
       });
 
@@ -1401,7 +1400,6 @@ const getAllOrderData = async (req, res, next) => {
     const formattedOrders = orderData.flatMap((order, orderIndex) => {
       return order.items.map((item, itemIndex) => {
         const productDetails = item.productDetails || {};
-
         return {
           id: order.id,
           order_id: `#${order.order_id}`,
@@ -1613,7 +1611,6 @@ const fetchAllPlans = async (req, res, next) => {
     const formattedPlans = allPlans.map((plan) => {
       const planData = plan.get({ plain: true });
       let rawFeatures = planData.features;
-
       if (typeof rawFeatures === "string") {
         try {
           let cleaned = rawFeatures.trim();
@@ -1624,7 +1621,6 @@ const fetchAllPlans = async (req, res, next) => {
           if (cleaned.includes("'")) {
             cleaned = cleaned.replace(/'/g, '"');
           }
-
           rawFeatures = JSON.parse(cleaned);
         } catch (e) {
           console.error("Parsing error for ID:", planData.id, e.message);
@@ -1681,7 +1677,6 @@ const createNewPlane = async (req, res, next) => {
 const updatePlan = async (req, res, next) => {
   try {
     const { id, plan_name, price, features, is_active } = req.body;
-
     const isExitsPlan = await Plan.findOne({
       where: {
         id,

@@ -221,6 +221,12 @@ const server = app.listen(PORT, () => {
   );
   console.log(`📡 URL: http://localhost:${PORT}`);
 });
+// const server = app.listen(PORT,'0.0.0.0', () => {
+//   console.log(
+//     `🚀 Server running in ${process.env.NODE_ENV || "development"} mode`,
+//   );
+//   console.log(`📡 URL: http://localhost:${PORT}`);
+// });
 
 process.on("unhandledRejection", (err) => {
   console.log("UNHANDLED REJECTION! 🌑 Shutting down...");

@@ -42,6 +42,7 @@ const {
 const { paginateArray } = require("../../utils/paginateArray");
 const Plan = require("../../modals/planModal");
 const Subscriber = require("../../modals/subscriberModal");
+const { sortProductsByBabyPreference } = require("../../utils/preferenceSorter");
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -540,15 +541,36 @@ const userProfile = async (req, res, next) => {
           as: "babies",
           required: false,
         },
+        {
+          model: Subscriber,
+          as: 'subscribers',
+          attributes: ["start_date", "status", "end_date"],
+          required: false,
+        }
       ],
     });
     if (!userData) {
       throw new CoustomError("User not found!", 404);
     }
-    const user = await processBabyData(userData);
+
+
+    const userSub = userData.get({ plain: true });
+    const { subscribers, ...restUserData } = userSub;
+    const sub = Array.isArray(subscribers) ? subscribers[0] : subscribers;
+
+    const user = await processBabyData(restUserData);
+
+    const userDetails = {
+      ...user,
+      subscription: sub?.status ? {
+        status: sub.status,
+        start_date: sub.start_date,
+        end_date: sub.end_date
+      } : null
+    };
 
     sendResponse(res, "User and all baby profiles fetched successfully", 200, {
-      user: user,
+      user: userDetails,
     });
   } catch (error) {
     next(error);
@@ -850,6 +872,35 @@ const updateBabyProfileWithStep = async (req, res, next) => {
 const homeData = async (req, res, next) => {
   try {
     const { id } = req.user;
+    const userData = await User.findOne({
+      where: { id },
+      include: [{
+        model: Subscriber,
+        as: 'subscribers',
+        attributes: ["start_date", "status", "end_date"],
+        required: false,
+      }],
+      raw: true,
+      nest: true,
+    });
+
+    if (!userData) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const sub = Array.isArray(userData.subscribers) ? userData.subscribers[0] : userData.subscribers;
+
+    const userDetails = {
+      id: userData.id,
+      name: userData.name,
+      email: userData.email,
+      subscription: sub?.status ? {
+        status: sub.status,
+        start_date: sub.start_date,
+        end_date: sub.end_date
+      } : null
+    };
+
     const homeAllData = await BabyProfile.findAll({
       where: {
         user_id: id,
@@ -981,6 +1032,7 @@ const homeData = async (req, res, next) => {
       return bannerJson;
     });
     sendResponse(res, "data fetched", 200, {
+      userDetails,
       formattedBabyData,
       allBanners,
       categoryShop: finalResponse,
@@ -1370,10 +1422,18 @@ const productCategoryWiseData = async (req, res, next) => {
     //   category_id,
     //   user_id: user_id,
     // });
+    const babyId = await User.findOne({
+      where: {
+        id: user_id
+      }
+    })
+
+    const updatedData = await sortProductsByBabyPreference(products, babyId.selected_baby)
 
     sendResponse(res, "Products fetched successfully", 200, {
-      count: products.length,
-      products: products,
+      count: updatedData.length,
+      products: updatedData,
+
     });
   } catch (error) {
     next(error);
@@ -2702,92 +2762,78 @@ const verifyPayment = async (req, res, next) => {
 
     const { metadata, payment_status, mode, subscription } = session;
 
-    // if (mode === "subscription") {
-    //   if(payment_status === "paid") {
-    //     throw new CoustomError("Subscription payment not successful", 400);
-
-    //   const newSubscriber = await Subscriber.create({
-    //     user_id: metadata.userId,
-    //     plan_id: metadata.planId,
-    //     stripe_subscription_id: subscription.id,
-    //     status: "active",
-    //     start_date: new Date(subscription.current_period_start * 1000),
-    //     end_date: new Date(subscription.current_period_end * 1000),
-    //     stripe_invoice_url: session.invoice?.hosted_invoice_url,
-    //     stripe_invoice_pdf: session.invoice?.invoice_pdf,
-    //     payment_method: session.payment_method_types[0],
-    //   });
-
-    // }
-    // else {
-
-    // }
-
-    //   await Transaction.create({
-    //     user_id: metadata.userId,
-    //     subscription_id: newSubscriber.id,
-    //     stripe_session_id: sessionId,
-    //     transaction_id:
-    //       subscription.latest_invoice.payment_intent ||
-    //       session.payment_intent ||
-    //       subscription.id,
-    //     payment_intent_id:  subscription.latest_invoice.payment_intent,
-    //     invoice_id:
-    //       session.invoice?.id ||
-    //       (typeof session.invoice === "string" ? session.invoice : null),
-    //     invoice_url: session.invoice
-    //       ? session.invoice.hosted_invoice_url
-    //       : null,
-    //     amount: session.amount_total / 100,
-    //     status: "paid",
-    //     payment_method: session.payment_method_types[0],
-    //   });
-
-    //   // 5. User Model Update (Premium status ke liye)
-    //   await User.update(
-    //     { current_subscription_id: newSubscriber.id },
-    //     { where: { id: metadata.userId } },
-    //   );
-
-    //   return sendResponse(res, "Subscription successful", 200, {
-    //     subscriptionId: newSubscriber.id,
-    //   });
-    // }
-
     if (mode === "subscription") {
       const isPaid = payment_status === "paid";
 
-      console.log("Raw Stripe Start:", subscription.current_period_start);
+      console.log("Raw Stripe Start:", subscription);
       console.log(
         "Formatted JS Date:",
         new Date(subscription.current_period_start * 1000),
       );
 
-      const newSubscriber = await Subscriber.create({
+      const startDateUnix = subscription?.start_date || subscription?.created;
+      const startDate = startDateUnix ? new Date(startDateUnix * 1000) : new Date();
+
+      let endDate = null;
+      if (subscription?.billing_cycle_anchor) {
+        if (subscription?.start_date == subscription?.billing_cycle_anchor) {
+          endDate = new Date(startDate);
+          if (subscription.plan.interval === 'year') {
+            endDate.setFullYear(endDate.getFullYear() + 1);
+          } else if (subscription.plan.interval === 'month') {
+            endDate.setMonth(endDate.getMonth() + 1);
+          }
+        } else {
+          endDate = new Date(subscription.billing_cycle_anchor * 1000);
+        }
+      } else if (startDateUnix && subscription?.plan?.interval) {
+        endDate = new Date(startDate);
+        if (subscription.plan.interval === 'year') {
+          endDate.setFullYear(endDate.getFullYear() + 1);
+        } else if (subscription.plan.interval === 'month') {
+          endDate.setMonth(endDate.getMonth() + 1);
+        }
+      }
+      let subscriberRecord = await Subscriber.findOne({
+        where: { user_id: metadata.userId }
+      });
+
+      const subscriberData = {
         user_id: metadata.userId,
         plan_id: metadata.planId,
         stripe_subscription_id: subscription?.id || null,
-        status: isPaid ? "active" : "failed",
-        start_date: subscription
-          ? new Date(subscription.current_period_start * 1000)
-          : new Date(),
-        end_date: subscription
-          ? new Date(subscription.current_period_end * 1000)
-          : null,
+        status: isPaid ? "active" : "pending",
+        start_date: startDate,
+        end_date: endDate,
         stripe_invoice_url: session.invoice?.hosted_invoice_url || null,
         stripe_invoice_pdf: session.invoice?.invoice_pdf || null,
         payment_method: session.payment_method_types[0] || "card",
-      });
+      };
+
+      if (subscriberRecord) {
+        console.log("Existing subscriber found. Updating the record...");
+        if (isPaid && subscriberRecord.stripe_subscription_id && subscriberRecord.stripe_subscription_id !== subscription?.id) {
+          try {
+            await stripe.subscriptions.cancel(subscriberRecord.stripe_subscription_id);
+          } catch (err) {
+            console.error("Failed to cancel old stripe subscription:", err);
+          }
+        }
+        await subscriberRecord.update(subscriberData);
+      } else {
+        console.log("No existing subscriber. Creating new record...");
+        subscriberRecord = await Subscriber.create(subscriberData);
+      }
 
       const transaction = await Transaction.create({
         user_id: metadata.userId,
-        subscription_id: newSubscriber.id,
+        subscription_id: subscriberRecord.id,
         stripe_session_id: sessionId,
         transaction_id:
           subscription?.latest_invoice?.payment_intent ||
           subscription?.id ||
           "n/a",
-        payment_intent_id: subscription?.latest_invoice?.payment_intent || null,
+        payment_intent_id: subscription?.latest_invoice?.payment_intent || subscription?.id || null,
         invoice_id:
           session.invoice?.id ||
           (typeof session.invoice === "string" ? session.invoice : null),
@@ -2795,19 +2841,20 @@ const verifyPayment = async (req, res, next) => {
         amount: session.amount_total / 100,
         status: isPaid ? "paid" : "failed",
         payment_method: session.payment_method_types[0] || "card",
+        subscription_plan_id: metadata.planId,
       });
 
       if (isPaid) {
         await User.update(
           {
-            current_subscription_id: newSubscriber.id,
+            current_subscription_id: subscriberRecord.id,
             stripe_subscription_id: subscription?.id || null,
           },
           { where: { id: metadata.userId } },
         );
-        await newSubscriber.update({ transaction_id: transaction.id }); // Subscriber record ko Transaction ID se update karna
+        await subscriberRecord.update({ transaction_id: transaction.id }); // Subscriber record ko Transaction ID se update karna
         return sendResponse(res, "Subscription activated successfully", 200, {
-          subscriptionId: newSubscriber.id,
+          subscriptionId: subscriberRecord.id,
         });
       } else {
         // Agar fail hua toh response
@@ -3726,11 +3773,11 @@ const getRecommendedProduct = async (req, res, next) => {
     const productIds = [...new Set(productData.map((item) => item.id))];
     const productsWithPrices = await getCalculatedProducts({
       product_id: productIds,
-      user_id,
+      // user_id,
     });
-
     sendResponse(res, "Featched all the product", 200, productsWithPrices);
   } catch (error) {
+    console.log("Error ", error)
     next(error);
   }
 };

@@ -3,6 +3,7 @@ const { sequelize } = require("../../dbConfig.js");
 const User = require("./userModal.js");
 const Order = require("./orderModal.js");
 const Subscriber = require("./subscriberModal.js");
+const Plan = require("./planModal.js");
 
 const Transaction = sequelize.define(
   "Transaction",
@@ -49,6 +50,8 @@ Transaction.belongsTo(User, { as: "user", foreignKey: "user_id" });
 Transaction.belongsTo(Order, { as: "order", foreignKey: "order_id" });
 Transaction.belongsTo(Subscriber, { as: "subscription", foreignKey: "subscription_id" });
 Subscriber.hasOne(Transaction, { as: "subscription", foreignKey: "subscription_id" });
+Transaction.belongsTo(Plan, { as: "subscriptionPlan", foreignKey: "subscription_plan_id" });
+Plan.hasOne(Transaction, { as: "subscriptionPlan", foreignKey: "subscription_plan_id" });
 Order.hasOne(Transaction, { as: "transaction", foreignKey: "order_id" });
 
 (async () => {
