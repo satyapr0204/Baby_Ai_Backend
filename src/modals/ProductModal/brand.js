@@ -14,17 +14,15 @@ const { sequelize } = require("../../../dbConfig");
 
 
 const Brand = sequelize.define(
-  "Brand",
-  {
-    name: {
-      type: DataTypes.STRING,
-      // unique: true,
+    "Brand", {
+        name: {
+            type: DataTypes.STRING,
+            // unique: true,
+        },
+    }, {
+        tableName: "brands",
+        timestamps: true,
     },
-  },
-  {
-    tableName: "brands",
-    timestamps: true,
-  },
 );
 
 // (async () => {

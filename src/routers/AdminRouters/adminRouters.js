@@ -48,7 +48,7 @@ const { authenticateToken } = require("../../middleware/authMiddleware");
 const validateBody = require("../../middleware/validator");
 const { cancelMyOrder } = require("../../controllers/UserControllers/controllers");
 
-const uploadBanner = path.join(__dirname, "../../Banners");
+const uploadBanner = path.join(__dirname, "../../files/Banners");
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     if (!fs.existsSync(uploadBanner)) {
@@ -264,7 +264,7 @@ adminRouter.get("/all-plans", authenticateToken, fetchAllPlans);
 adminRouter.post(
   "/create-plan",
   authenticateToken,
-  validateBody(["plan_name", "duraction", "price", "features"]),
+  validateBody(["plan_name", "duraction", "price", "features","token_count"]),
   createNewPlane,
 );
 

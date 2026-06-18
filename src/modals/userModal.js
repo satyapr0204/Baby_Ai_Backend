@@ -74,6 +74,10 @@ const User = sequelize.define(
       type: DataTypes.INTEGER,
       defaultValue: null,
     },
+    scan_token: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
+    }
   },
   {
     tableName: "users",

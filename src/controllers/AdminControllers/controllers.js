@@ -27,6 +27,7 @@ const Plan = require("../../modals/planModal");
 const Order = require("../../modals/orderModal");
 const Address = require("../../modals/addressModal");
 const Transaction = require("../../modals/transactionModal");
+const SubscriberShema = require("../../modals/subscriberModal");
 
 const processBabyData = async (data) => {
   if (!data) return data;
@@ -75,15 +76,15 @@ const processBabyData = async (data) => {
   const [fabrics, colors] = await Promise.all([
     fabricIds.size > 0
       ? Fabric.findAll({
-          where: { id: Array.from(fabricIds) },
-          attributes: ["id", "name"],
-        })
+        where: { id: Array.from(fabricIds) },
+        attributes: ["id", "name"],
+      })
       : [],
     colorIds.size > 0
       ? Color.findAll({
-          where: { id: Array.from(colorIds) },
-          attributes: ["id", "name"],
-        })
+        where: { id: Array.from(colorIds) },
+        attributes: ["id", "name"],
+      })
       : [],
   ]);
 
@@ -111,11 +112,13 @@ const processBabyData = async (data) => {
   });
 
   babiesToProcess.forEach((baby) => {
+    console.log("baby", baby)
     if (
       baby.baby_profile_image &&
       !baby.baby_profile_image.startsWith("http")
     ) {
       baby.baby_profile_image = `${process.env.BACKEND_URL}/baby-image/${baby.baby_profile_image}`;
+      baby.id = baby.id
     }
 
     const fIds = parseIds(baby.fabric_preferences);
@@ -1201,7 +1204,7 @@ const updateBanner = async (req, res, next) => {
   } catch (error) {
     await transaction.rollback();
     if (req.file) {
-      await fs.unlink(req.file.path).catch(() => {});
+      await fs.unlink(req.file.path).catch(() => { });
     }
     next(error);
   }
@@ -1608,6 +1611,21 @@ const fetchAllPlans = async (req, res, next) => {
         ],
       },
     });
+    let userData;
+    if (req.user.is_admin !== 1) {
+      userData = await SubscriberShema.findOne({
+        where: {
+          user_id: req.user.id,
+          status: 'active'
+        },
+        attributes: ["plan_id", "status"]
+
+      })
+    }
+
+    const activePlanId = userData?.plan_id;
+    const subscriptionStatus = userData?.status || null;
+
     const formattedPlans = allPlans.map((plan) => {
       const planData = plan.get({ plain: true });
       let rawFeatures = planData.features;
@@ -1630,10 +1648,13 @@ const fetchAllPlans = async (req, res, next) => {
               ?.map((s) => s.slice(1, -1)) || [];
         }
       }
-
+      const isSubscribed = userData && Number(planData.id) === Number(activePlanId);
       return {
         ...planData,
         features: Array.isArray(rawFeatures) ? rawFeatures : [],
+        subscribed: isSubscribed ? true : false,
+        user_active_plan_id: activePlanId || null,
+        user_plan_status: subscriptionStatus
       };
     });
     sendResponse(res, "Fetching all the plans", 200, {
@@ -1646,26 +1667,14 @@ const fetchAllPlans = async (req, res, next) => {
 
 const createNewPlane = async (req, res, next) => {
   try {
-    const { plan_name, duraction, price, features } = req.body;
-    let currency = "usd";
-    const product = await stripe.products.create({
-      name: plan_name,
-      default_price_data: {
-        currency: currency,
-        recurring: {
-          interval: duraction,
-        },
-        unit_amount: Number(price) * 100,
-      },
-    });
-
+    const { plan_name, duraction, price, features, token_count } = req.body;
+    
     await Plan.create({
       plan_name,
       duraction,
       price,
       features,
-      stripe_price_id: product.default_price,
-      stripe_product_id: product.id,
+      token_count
     });
 
     sendResponse(res, "Plan has been created successfully", 201);
@@ -1685,12 +1694,29 @@ const updatePlan = async (req, res, next) => {
     });
     if (!isExitsPlan) throw new CoustomError("Plan isn't avilible", 400);
 
+    let updatedStripePriceId = isExitsPlan.stripe_price_id;
+
+    if (price && Number(price) !== Number(isExitsPlan.price)) {
+      console.log(`Price changed from ${isExitsPlan.price} to ${price}. Creating new price on Stripe...`);
+      let stripeProductId = isExitsPlan.stripe_product_id;
+      if (!stripeProductId && isExitsPlan.stripe_price_id) {
+        const oldPriceDetails = await stripe.prices.retrieve(isExitsPlan.stripe_price_id);
+        stripeProductId = oldPriceDetails.product;
+      }
+      const newStripePrice = await stripe.prices.create({
+        unit_amount: Math.round(Number(price) * 100),
+        currency: 'usd',
+        product: stripeProductId,
+      });
+      updatedStripePriceId = newStripePrice.id;
+    }
+
     await isExitsPlan.update({
-      plan_name: plan_name ? plan_name : isExitsPlan.plan_name,
-      // duraction: duraction ? duraction : isExitsPlan.duraction,
-      price: price ? price : isExitsPlan.price,
-      features: features ? features : isExitsPlan.features,
-      is_active: is_active ? is_active : isExitsPlan.is_active,
+      plan_name: plan_name !== undefined ? plan_name : isExitsPlan.plan_name,
+      price: price !== undefined ? price : isExitsPlan.price,
+      stripe_price_id: updatedStripePriceId,
+      features: features !== undefined ? features : isExitsPlan.features,
+      is_active: is_active !== undefined ? is_active : isExitsPlan.is_active,
     });
 
     sendResponse(res, "Your plan has been updated successfully", 200);

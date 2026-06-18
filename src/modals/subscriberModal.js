@@ -27,15 +27,9 @@ const SubscriberShema = sequelize.define('Subscribers', {
     start_date: {
         type: DataTypes.DATE
     },
-    stripe_subscription_id: {
-        type: DataTypes.STRING
-    },
     end_date: {
         type: DataTypes.DATE
     },
-    cancelled_at: {
-        type: DataTypes.DATE
-    }
 }, {
     tableName: 'Subscribers',
     timestamps: true

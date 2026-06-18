@@ -165,12 +165,17 @@ const staticOptionsImg = {
 
 app.use(
   "/baby-image",
-  express.static(path.join(__dirname, "src/BabyProfileImage"), staticOptionsImg),
+  express.static(path.join(__dirname, "files/BabyProfileImage"), staticOptionsImg),
+);
+
+app.use(
+  "/baby-try-on-image",
+  express.static(path.join(__dirname, "files/uploads/"), staticOptionsImg),
 );
 
 app.use(
   "/banners",
-  express.static(path.join(__dirname, "src/Banners"), staticOptionsImg),
+  express.static(path.join(__dirname, "files/Banners"), staticOptionsImg),
 );
 
 app.use("/admin", adminRoutes);

@@ -12,9 +12,6 @@ const Plan = sequelize.define(
     plan_name: {
       type: DataTypes.STRING,
     },
-    // plan_type: {
-    //   type: DataTypes.STRING,
-    // },
     duraction: {
       type: DataTypes.STRING,
     },
@@ -30,16 +27,11 @@ const Plan = sequelize.define(
       type: DataTypes.JSON,
       allowNull: true,
     },
-    stripe_product_id: {
-      type: DataTypes.STRING,
-    },
-    stripe_price_id: {
-      type: DataTypes.STRING,
-    },
-    // quantaty: {
-    //   type: DataTypes.INTEGER,
-    //   defaultValue: 0,
-    // },
+    token_count: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
+    }
+
   },
   {
     tableName: "Plan",

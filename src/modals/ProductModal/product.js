@@ -1,37 +1,3 @@
-// module.exports = (sequelize, DataTypes) => {
-//   const Product = sequelize.define("Product", {
-//     product_id: {
-//       type: DataTypes.STRING,
-//       unique: true,
-//     },
-
-//     product_name: DataTypes.STRING,
-//     description: DataTypes.TEXT,
-
-//     msrp_price: DataTypes.FLOAT,
-//     sale_price: DataTypes.FLOAT,
-//     wholesale_cost: DataTypes.FLOAT,
-
-//     product_images: DataTypes.JSON,
-//     product_url: DataTypes.TEXT,
-
-//     is_best_seller: DataTypes.BOOLEAN,
-
-//     retailer_id: DataTypes.STRING,
-//   });
-
-//   Product.associate = (models) => {
-//     Product.belongsTo(models.Fabric);
-//     Product.belongsTo(models.Color);
-//     Product.belongsTo(models.Gender);
-//     Product.belongsTo(models.Size);
-//     Product.belongsTo(models.Brand);
-//     Product.belongsTo(models.Category);
-//   };
-
-//   return Product;
-// };
-
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../../../dbConfig.js");
 
@@ -45,6 +11,7 @@ const Category = require("./category.js");
 const { Wishlist } = require("../userWishlistModal.js");
 const Retailer = require("../ProductModal/retailer.js");
 const Cart = require("../cartModal.js");
+// const productGenratedImage = require("./productGenratedImage.js");
 
 const Product = sequelize.define(
   "Product",
@@ -79,7 +46,7 @@ const Product = sequelize.define(
     },
     retailer_id: {
       type: DataTypes.INTEGER,
-    },
+    }
   },
   {
     tableName: "products",
@@ -105,6 +72,15 @@ Retailer.hasMany(Product, {
 });
 
 Category.hasMany(Product, { foreignKey: "category_id", as: "categories" });
+
+const productGenratedImage = require("./productGenratedImage.js");
+const recentSearch = require("./recentlySearch.js");
+
+Product.hasOne(productGenratedImage, { foreignKey: 'product_id', as: 'aiImage' });
+productGenratedImage.belongsTo(Product, { foreignKey: 'product_id', as: 'productMain' });
+
+Product.hasOne(recentSearch, { foreignKey: 'product_id', as: 'recentSearchProduct' });
+recentSearch.belongsTo(Product, { foreignKey: 'product_id', as: 'recentSearchProduct' });;
 
 // Sync Logic
 (async () => {
