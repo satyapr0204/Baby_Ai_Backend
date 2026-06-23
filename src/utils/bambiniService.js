@@ -132,6 +132,7 @@
 
 // module.exports = { createBambiniOrder, trackBambiniOrder };
 
+require("dotenv").config();
 const fetch = require("node-fetch");
 const xml2js = require("xml2js");
 const Order = require("../modals/orderModal");
@@ -162,8 +163,12 @@ const createOrder = async (orderId, userData) => {
     ],
   });
 
-  const key = "45GLHF538F5VIXEZ";
-  const email = "jayfisher901@gmail.com";
+  const key = process.env.BAMBINI_API_KEY;
+  const email = process.env.BAMBINI_API_EMAIL;
+
+  if (!key || !email) {
+    return { status: false, message: "Bambini API credentials are not configured" };
+  }
 
   const addressData = {
     firstname: userData.name || "John",
@@ -194,8 +199,6 @@ const createOrder = async (orderId, userData) => {
   const formData = new URLSearchParams();
   formData.append("address", addressXml);
   formData.append("cart", cartXml);
-
-  console.log("authHeader", authHeader);
 
   try {
     // const response = await fetch(
@@ -264,9 +267,13 @@ const createOrder = async (orderId, userData) => {
 };
 
 const trackOrder = async () => {
-  const key = "45GLHF538F5VIXEZ";
-  const email = "jayfisher901@gmail.com";
+  const key = process.env.BAMBINI_API_KEY;
+  const email = process.env.BAMBINI_API_EMAIL;
   const orders = "Bam33746";
+
+  if (!key || !email) {
+    return { status: false, message: "Bambini API credentials are not configured" };
+  }
 
   const authHeader =
     "Basic " + Buffer.from(`${email}:${key}`).toString("base64");

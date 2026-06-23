@@ -64,7 +64,7 @@ const getBase64FromUrl = async (url,customHeaders = {}) => {
 
 const createStripeCustomer = async (user_id,name,email) => {
   try {
-    console.log("user_id, name, email",user_id,name,email);
+  
     const customer = await stripe.customers.create({
       name: name,
       email: email,
@@ -82,7 +82,6 @@ const createStripeCustomer = async (user_id,name,email) => {
 
 const genrateOtpAndToken = async (input,name,channel,country_code) => {
   const otp = crypto.randomInt(10000,99999).toString();
-  console.log("otp",otp);
   const expiryToken = await jwt.sign(
     { input,otp,channel,name,country_code },
     process.env.JWT_SECRET,
@@ -91,11 +90,31 @@ const genrateOtpAndToken = async (input,name,channel,country_code) => {
   return { otp,expiryToken };
 };
 
+const ALLOWED_IMAGE_HOSTS = [
+  "www.bambinilayette.com",
+  "bambinilayette.com",
+  "cdn.shopify.com",
+];
+
 const proxyImage = async (req,res) => {
   try {
     const { url } = req.query;
-    console.log("url",url);
     if(!url) return res.status(400).send("URL missing");
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return res.status(400).send("Invalid URL");
+    }
+
+    if(parsedUrl.protocol !== "https:") {
+      return res.status(400).send("Only HTTPS URLs are allowed");
+    }
+
+    if(!ALLOWED_IMAGE_HOSTS.includes(parsedUrl.hostname)) {
+      return res.status(403).send("Host not allowed");
+    }
 
     const response = await axios({
       method: "get",
@@ -103,15 +122,15 @@ const proxyImage = async (req,res) => {
       headers: {
         "X-App-ID": "BabyAiApp-Frontend-v1",
       },
+      maxRedirects: 2,
+      timeout: 10000,
     });
-    console.log("response",response);
     res.setHeader(
       "Content-Type",
       response.headers["content-type"] || "image/jpeg",
     );
     response.data.pipe(res);
   } catch(error) {
-    console.log("error",error);
     console.error("Proxy Error:",error.message);
     res.status(500).send("Image fetch failed");
   }
@@ -301,10 +320,8 @@ const sendOtpForLogin = async (req,res,next) => {
       //   throw new CoustomError("Invalid phone number length", 400);
       // }
     }
-    console.log(`OTP for ${input}: ${otp}`);
     return sendResponse(res,"OTP sent! Valid for 30 seconds.",200,{
       token: expiryToken,
-      otp: otp,
     });
   } catch(error) {
     next(error);
@@ -417,10 +434,8 @@ const sendOtpForUpdatePhoneEmail = async (req,res,next) => {
     } else if(channel === "phone") {
       const phoneStr = req.body.input.toString();
     }
-    console.log(`OTP for ${input}: ${otp}`);
     return sendResponse(res,"OTP sent! Valid for 30 seconds.",200,{
       token: expiryToken,
-      otp: otp,
     });
   } catch(error) {
     next(error);
@@ -651,7 +666,7 @@ const updateBabyProfileWithStep = async (req,res,next) => {
     } = req.body;
 
     let baby_profile_image;
-    console.log("req.body",req.body);
+
     if(req.file) {
       baby_profile_image = req.file.filename;
       console.log("baby_profile_image in side if",baby_profile_image);
