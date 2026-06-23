@@ -29,7 +29,6 @@ const authenticateToken = (req, res, next) => {
       ? authHeader.split(" ")[1]
       : null;
 
-  console.log("Authorization Header:", authHeader);
   if (!token || token === "null" || token === "undefined") {
     // 401 is more appropriate for "No Auth"
     // return next(new CoustomError('Access denied. No token provided.', 401));
@@ -44,7 +43,6 @@ const authenticateToken = (req, res, next) => {
           : "Invalid token.";
       return next(new CoustomError(msg, 403));
     }
-    console.log("Login user", decodedUser);
     req.user = decodedUser;
     next();
   });

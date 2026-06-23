@@ -10,7 +10,7 @@ const sendOtpOnEmail = async (mailOptions, retries = 3) => {
             pass: process.env.GMAIL_PASS,
         },
         tls: {
-            rejectUnauthorized: false,
+            rejectUnauthorized: true,
         },
     });
 

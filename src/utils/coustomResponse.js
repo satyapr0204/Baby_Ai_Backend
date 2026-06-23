@@ -39,7 +39,7 @@ const sendError = (res, error) => {
         status: statusCode,
         success: false,
         message,
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+        ...(process.env.NODE_ENV === 'development' && { stack: error.stack }),
     });
 };
 

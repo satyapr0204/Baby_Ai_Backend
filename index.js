@@ -110,7 +110,6 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-0;
 
 app.use("/", limiter);
 
@@ -122,8 +121,13 @@ app.use("/", limiter);
 //   }),
 // );
 
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 const corsOptions = {
-  origin: "*", // Ya fir aapka ngrok/frontend URL
+  origin: allowedOrigins.length > 0 ? allowedOrigins : false,
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   credentials: true,
   optionsSuccessStatus: 204,

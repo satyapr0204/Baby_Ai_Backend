@@ -257,7 +257,7 @@ adminRouter.get("/orders", authenticateToken, getAllOrderData);
 
 adminRouter.get("/transactions", authenticateToken, getAllTransactions);
 
-adminRouter.get("/get-data", getAllData);
+adminRouter.get("/get-data", authenticateToken, getAllData);
 
 adminRouter.get("/all-plans", authenticateToken, fetchAllPlans);
 
