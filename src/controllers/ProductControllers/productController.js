@@ -65,45 +65,41 @@ const getOrCreate = async (Model, value) => {
 };
 
 const updateCategoryPriceRange = async (Modal, Ids) => {
-  try {
-    for (const id of Ids) {
-      if (!id) continue;
-      const columnToFilter =
-        Modal.name === "Category" ? "category_id" : "retailer_id";
+  for (const id of Ids) {
+    if (!id) continue;
+    const columnToFilter =
+      Modal.name === "Category" ? "category_id" : "retailer_id";
 
-      const result = await Product.findOne({
-        where: {
-          [columnToFilter]: id,
-          sale_price: {
-            [Op.gt]: 0,
-          },
+    const result = await Product.findOne({
+      where: {
+        [columnToFilter]: id,
+        sale_price: {
+          [Op.gt]: 0,
         },
-        attributes: [
-          [sequelize.fn("MIN", sequelize.col("sale_price")), "minPrice"],
-          [sequelize.fn("MAX", sequelize.col("sale_price")), "maxPrice"],
-        ],
-        raw: true,
-      });
+      },
+      attributes: [
+        [sequelize.fn("MIN", sequelize.col("sale_price")), "minPrice"],
+        [sequelize.fn("MAX", sequelize.col("sale_price")), "maxPrice"],
+      ],
+      raw: true,
+    });
 
-      if (result && result.minPrice !== null) {
-        const rangeText = `${result.minPrice} - ${result.maxPrice}`;
-        await Modal.update(
-          {
-            price_range: rangeText,
-          },
-          { where: { id: id } },
-        );
-      }
+    if (result && result.minPrice !== null) {
+      const rangeText = `${result.minPrice} - ${result.maxPrice}`;
+      await Modal.update(
+        {
+          price_range: rangeText,
+        },
+        { where: { id: id } },
+      );
     }
-    console.log("✅ Category Price Ranges Updated");
-  } catch (error) {
-    console.error("❌ Error updating price range:", error.message);
   }
+  console.log("✅ Category Price Ranges Updated");
 };
 
 // ================= MAIN UPLOAD =================
 
-exports.uploadFile = async (req, res) => {
+exports.uploadFile = async (req, res, next) => {
   if (!req.file) {
     return res.status(400).json({ message: "File required" });
   }
@@ -271,7 +267,11 @@ exports.uploadFile = async (req, res) => {
       await updateCategoryPriceRange(Retailer, Array.from(affectedRetailerIds));
     }
 
-    fs.unlinkSync(req.file.path);
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch (unlinkErr) {
+      console.error("Failed to remove uploaded file:", unlinkErr.message);
+    }
 
     res.json({
       message: "Upload Done 🚀",
@@ -282,17 +282,14 @@ exports.uploadFile = async (req, res) => {
       skipped_no_upc: skipNoUPC,
     });
   } catch (err) {
-    console.error("rrrr", err);
-    res.status(500).json({
-      message: "Upload Failed",
-      error: err.message,
-    });
+    console.error("Upload error:", err);
+    next(err);
   }
 };
 
 // ================= GET =================
 
-exports.getProducts = async (req, res) => {
+exports.getProducts = async (req, res, next) => {
   try {
     const data = await Product.findAll({
       include: [Fabric, Color, Size, Gender, Brand, Category],
@@ -303,9 +300,6 @@ exports.getProducts = async (req, res) => {
       data,
     });
   } catch (err) {
-    res.status(500).json({
-      message: "Error fetching",
-      error: err.message,
-    });
+    next(err);
   }
 };

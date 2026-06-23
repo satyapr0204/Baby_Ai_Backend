@@ -122,7 +122,7 @@ function extractAiPayload(payload, availableSizeIds) {
   return aiPayload;
 }
 
-async function getRecommendedSize(req, res) {
+async function getRecommendedSize(req, res, next) {
   try {
     const productWhere = buildProductFilter(req.body);
     const availableSizeIds = await resolveAvailableSizeIds(
@@ -195,22 +195,13 @@ async function getRecommendedSize(req, res) {
         measurements,
         products: clothes,
       },
-      // recommended_size: recommendedSizeName,
-      // recommended_size_id: recommendedSizeId,
-      // measurements,
-      // products: clothes,
     });
   } catch (err) {
-    return res.status(500).json({
-      status: 500,
-      success: false,
-      message: "Failed to fetch recommended size",
-      error: err.message,
-    });
+    next(err);
   }
 }
 
-async function getSizes(req, res) {
+async function getSizes(req, res, next) {
   try {
     const allSizeList = await Size.findAll({
       order: [["id", "ASC"]],
@@ -226,12 +217,7 @@ async function getSizes(req, res) {
       },
     });
   } catch (err) {
-    return res.status(500).json({
-      status: 500,
-      success: false,
-      message: "Failed to fetch size list",
-      error: err.message,
-    });
+    next(err);
   }
 }
 
