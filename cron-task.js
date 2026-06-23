@@ -58,7 +58,8 @@ const syncCategories = async () => {
     }
     console.log("✅ Sync Finished.");
   } catch (error) {
-    console.error("❌ Sync Error:", error.message);
+    console.error("❌ Sync Error:", error.message, error.stack);
+    throw error;
   }
 };
 
@@ -99,11 +100,20 @@ const syncRetailers = async () => {
     }
     console.log("✅ Retailer Sync Finished.");
   } catch (error) {
-    console.error("❌ Retailer Sync Error:", error.message);
+    console.error("❌ Retailer Sync Error:", error.message, error.stack);
+    throw error;
   }
 };
 
-cron.schedule("*/15 * * * *", syncRetailers);
-cron.schedule("*/10 * * * *", syncCategories);
+cron.schedule("*/15 * * * *", () => {
+  syncRetailers().catch((err) =>
+    console.error("❌ Unhandled cron error (syncRetailers):", err.message)
+  );
+});
+cron.schedule("*/10 * * * *", () => {
+  syncCategories().catch((err) =>
+    console.error("❌ Unhandled cron error (syncCategories):", err.message)
+  );
+});
 
 module.exports = { syncCategories, syncRetailers };

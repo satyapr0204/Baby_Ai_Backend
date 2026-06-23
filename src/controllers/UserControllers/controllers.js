@@ -76,7 +76,7 @@ const createStripeCustomer = async (user_id,name,email) => {
       return customer.id;
     }
   } catch(error) {
-    throw new error("Helper error at createStripeCustomer: " + error.message);
+    throw new Error("Helper error at createStripeCustomer: " + error.message);
   }
 };
 
@@ -91,11 +91,11 @@ const genrateOtpAndToken = async (input,name,channel,country_code) => {
   return { otp,expiryToken };
 };
 
-const proxyImage = async (req,res) => {
+const proxyImage = async (req,res,next) => {
   try {
     const { url } = req.query;
     console.log("url",url);
-    if(!url) return res.status(400).send("URL missing");
+    if(!url) throw new CoustomError("URL missing",400);
 
     const response = await axios({
       method: "get",
@@ -111,9 +111,8 @@ const proxyImage = async (req,res) => {
     );
     response.data.pipe(res);
   } catch(error) {
-    console.log("error",error);
     console.error("Proxy Error:",error.message);
-    res.status(500).send("Image fetch failed");
+    next(error instanceof CoustomError ? error : new CoustomError("Image fetch failed",502));
   }
 };
 
@@ -925,7 +924,7 @@ const updateBabyProfileWithStep = async (req,res,next) => {
         responseData,
       );
     default:
-      throw CoustomError("Invalid step provided!",400);
+      throw new CoustomError("Invalid step provided!",400);
     }
   } catch(error) {
     if(req.file) {
@@ -1593,7 +1592,7 @@ const fetchProductDetails = async (req,res,next) => {
     }
 
     if(!targetProduct) {
-      return { message: "Product not found" };
+      throw new CoustomError("Product not found",404);
     }
 
     const allSizeProducts = await Product.findAll({
@@ -2806,7 +2805,7 @@ const createCheckoutSession = async (req,res,next) => {
       include: ["product"],
     });
     // console.log("cartItems", cartItems);
-    if(cartItems.length === 0) throw new Error("Cart is empty");
+    if(cartItems.length === 0) throw new CoustomError("Cart is empty",400);
 
     const productDetailsList = await getCalculatedProducts({
       user_id: userId,
@@ -3123,7 +3122,7 @@ const verifyPayment = async (req,res,next) => {
 const generateAvatar = async (req,res,next) => {
   try {
     if(!req.file) {
-      return res.status(400).json({ message: "Please upload an image file." });
+      throw new CoustomError("Please upload an image file.",400);
     }
 
     const width = 250;
@@ -3158,11 +3157,7 @@ const generateAvatar = async (req,res,next) => {
     });
   } catch(error) {
     console.error("Avatar Generation Error:",error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to process image. Make sure the file is a valid image.",
-    });
-    next(error);
+    next(new CoustomError("Failed to process image. Make sure the file is a valid image.", 500));
   }
 };
 
@@ -4234,10 +4229,7 @@ const generateBabyTryOnModal = async (req,res,next) => {
     });
 
     if(!productData) {
-      return res.status(404).json({
-        success: false,
-        error: `Product with ID ${productId} not found.`
-      });
+      throw new CoustomError(`Product with ID ${productId} not found.`,404);
     }
 
     let formattedImages = [];
