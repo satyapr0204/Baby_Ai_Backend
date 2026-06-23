@@ -1,5 +1,6 @@
 const BabyProfile = require('../modals/babyProfileModal');
-const Color = require('../modals/ProductModal/color')
+const Color = require('../modals/ProductModal/color');
+const { shuffleArray, safeJsonParse } = require('./sharedHelpers');
 
 
 // const sortProductsByBabyPreference = async (products, babyId) => {
@@ -195,15 +196,6 @@ const Color = require('../modals/ProductModal/color')
 
 
 
-const shuffleArray = (array) => {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-};
-
 const sortProductsByBabyPreference = async (products, babyId) => {
     if (!products || products.length === 0) return [];
     if (!babyId) return products;
@@ -240,7 +232,7 @@ const sortProductsByBabyPreference = async (products, babyId) => {
         if(Array.isArray(rawColors)) {
             prefColorIds = rawColors;
         } else if(typeof rawColors === 'string') {
-            try { prefColorIds = JSON.parse(rawColors); } catch(e) { prefColorIds = []; }
+            prefColorIds = safeJsonParse(rawColors, []);
         } else if(rawColors !== null && rawColors !== undefined) {
 
             prefColorIds = [rawColors];
@@ -253,7 +245,7 @@ const sortProductsByBabyPreference = async (products, babyId) => {
         if(Array.isArray(rawFabrics)) {
             prefFabricIds = rawFabrics;
         } else if(typeof rawFabrics === 'string') {
-            try { prefFabricIds = JSON.parse(rawFabrics); } catch(e) { prefFabricIds = []; }
+            prefFabricIds = safeJsonParse(rawFabrics, []);
         } else if(rawFabrics !== null && rawFabrics !== undefined) {
 
             prefFabricIds = [rawFabrics];

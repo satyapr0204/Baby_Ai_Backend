@@ -8,55 +8,8 @@ const Color = require("../modals/ProductModal/color");
 const Size = require("../modals/ProductModal/size");
 const Brand = require("../modals/ProductModal/brand");
 const Cart = require("../modals/cartModal");
-
-const formatValue = (obj, isColor = false) => {
-  if (!obj || !obj.name) return obj;
-  if (Array.isArray(obj.name)) return obj;
-
-  let formattedNames;
-  if (obj.name.includes("/")) {
-    formattedNames = obj.name
-      .split("/")
-      .map((item) => item.trim())
-      .filter(Boolean);
-  } else {
-    formattedNames = [obj.name.trim()];
-  }
-
-  const result = {
-    ...obj,
-    name: formattedNames,
-  };
-
-  if (isColor) {
-    result.hashcode = formattedNames.map((name) => getColorHex(name));
-  }
-
-  return result;
-};
-
-const getColorHex = (dbColorName) => {
-  const colorMap = {
-    black: "#000000",
-    blue: "#0000FF",
-    grey: "#808080",
-    "heather grey": "#808080",
-    navy: "#000080",
-    red: "#FF0000",
-    white: "#FFFFFF",
-    pink: "#FFC0CB",
-    yellow: "#FFFF00",
-    green: "#008000",
-    mint: "#98FF98",
-    aqua: "#00FFFF",
-    cream: "#FFFDD0",
-    print: "#E0E0E0",
-    prints: "#E0E0E0",
-  };
-  const primaryColor = dbColorName.toLowerCase().split("/")[0].trim();
-  if (primaryColor.includes("print")) return colorMap["print"];
-  return colorMap[primaryColor] || "#D3D3D3";
-};
+const { formatValue } = require("./formatValue");
+const { safeJsonParse } = require("./sharedHelpers");
 
 const getCalculatedProductsWithSuffling = async ({
   category_id,
@@ -162,15 +115,7 @@ const getCalculatedProductsWithSuffling = async ({
 
       if (addonPct == 0 && discountPct == 0) {
         if (productRetailer) {
-          let selectedCats = [];
-          try {
-            selectedCats =
-              typeof productRetailer.selected_categories === "string"
-                ? JSON.parse(productRetailer.selected_categories)
-                : productRetailer.selected_categories || [];
-          } catch (e) {
-            selectedCats = [];
-          }
+          const selectedCats = safeJsonParse(productRetailer.selected_categories, []);
           if (selectedCats.map(Number).includes(Number(p.category_id))) {
             addonPct = parseFloat(productRetailer.addon_percentage) || 0;
             discountPct = parseFloat(productRetailer.discount) || 0;
@@ -187,15 +132,7 @@ const getCalculatedProductsWithSuffling = async ({
         markedPrice = cost + cost * (addonPct / 100);
         finalPrice = markedPrice - markedPrice * (discountPct / 100);
       }
-      let formattedImages = [];
-      try {
-        formattedImages =
-          typeof p.product_images === "string"
-            ? JSON.parse(p.product_images || "[]")
-            : p.product_images || [];
-      } catch (e) {
-        formattedImages = [];
-      }
+      const formattedImages = safeJsonParse(p.product_images, []);
 
       return {
         ...p,

@@ -47,6 +47,7 @@ const { saveOutputImage } = require("../../utils/saveOutputImage");
 const { BabyTRYON } = require("../../modals/babyTryOn");
 const ProductAIImage = require("../../modals/ProductModal/productGenratedImage");
 const recentSearch = require("../../modals/ProductModal/recentlySearch");
+const { safeJsonParse, formatImageUrl, extractUniqueColors } = require("../../utils/sharedHelpers");
 
 const client = new OpenAI({
   apiKey: process.env.OPEN_AI_KEY,
@@ -488,28 +489,7 @@ const colorsPreferenceList = async (req,res,next) => {
     if(!allColorList)
       throw new CoustomError("Color preference not found!",404);
 
-    let uniqueColors = new Set();
-    let finalColors = [];
-
-    allColorList.forEach((item) => {
-      const splitNames = item.name.includes("/")
-        ? item.name.split("/")
-        : [item.name];
-
-      splitNames.forEach((name) => {
-        const trimmedName = name.trim();
-        if(
-          !uniqueColors.has(trimmedName.toLowerCase()) &&
-          isNaN(trimmedName)
-        ) {
-          uniqueColors.add(trimmedName.toLowerCase());
-          finalColors.push({
-            id: item.id,
-            name: trimmedName,
-          });
-        }
-      });
-    });
+    const finalColors = extractUniqueColors(allColorList);
 
     sendResponse(res,"Fetching all color list",200,{
       allColorList: finalColors,
@@ -527,28 +507,7 @@ const getAllPreferencesData = async (req,res,next) => {
       Fabric.findAll({ attributes: { exclude: ["createdAt","updatedAt"] } }),
     ]);
 
-    let uniqueColors = new Set();
-    let finalColors = [];
-
-    colorsData.forEach((item) => {
-      const splitNames = item.name.includes("/")
-        ? item.name.split("/")
-        : [item.name];
-
-      splitNames.forEach((name) => {
-        const trimmedName = name.trim();
-        if(
-          !uniqueColors.has(trimmedName.toLowerCase()) &&
-          isNaN(trimmedName)
-        ) {
-          uniqueColors.add(trimmedName.toLowerCase());
-          finalColors.push({
-            id: item.id,
-            name: trimmedName,
-          });
-        }
-      });
-    });
+    const finalColors = extractUniqueColors(colorsData);
 
     sendResponse(res,"Fetching all preferences data",200,{
       colors: finalColors,
@@ -993,11 +952,7 @@ const homeData = async (req,res,next) => {
       .map((baby) => {
         return {
           ...baby,
-          baby_profile_image: baby.baby_profile_image
-            ? baby.baby_profile_image.startsWith("http")
-              ? baby.baby_profile_image
-              : `${process.env.BACKEND_URL}/baby-image/${baby.baby_profile_image}`
-            : null,
+          baby_profile_image: formatImageUrl(baby.baby_profile_image, "baby-image") || null,
           id: baby.id,
           selected: String(baby.id) === String(selectedBabyId)
             ? true
@@ -1118,7 +1073,7 @@ const homeData = async (req,res,next) => {
     const allBanners = bannersData.map((banner) => {
       const bannerJson = banner.toJSON();
       if(bannerJson.banner_url) {
-        bannerJson.banner_url = `${process.env.BACKEND_URL}/banners/${bannerJson.banner_url}`;
+        bannerJson.banner_url = formatImageUrl(bannerJson.banner_url, "banners");
       }
       return bannerJson;
     });
@@ -1656,7 +1611,7 @@ const fetchBabyProfileData = async (req,res,next) => {
       throw new CoustomError("Your baby details not found",404);
 
     if(isBabyProfile.baby_profile_image) {
-      isBabyProfile.baby_profile_image = `${process.env.BACKEND_URL}/baby-image/${isBabyProfile.baby_profile_image}`;
+      isBabyProfile.baby_profile_image = formatImageUrl(isBabyProfile.baby_profile_image, "baby-image");
     }
 
     sendResponse(res,"Baby detail fetched successfully",200,isBabyProfile);
@@ -2337,28 +2292,7 @@ const allFilterData = async (req,res,next) => {
       Fabric.findAll({ attributes: { exclude: ["createdAt","updatedAt"] } }),
     ]);
 
-    let uniqueColors = new Set();
-    let finalColors = [];
-
-    colorsData.forEach((item) => {
-      const splitNames = item.name.includes("/")
-        ? item.name.split("/")
-        : [item.name];
-
-      splitNames.forEach((name) => {
-        const trimmedName = name.trim();
-        if(
-          !uniqueColors.has(trimmedName.toLowerCase()) &&
-          isNaN(trimmedName)
-        ) {
-          uniqueColors.add(trimmedName.toLowerCase());
-          finalColors.push({
-            id: item.id,
-            name: trimmedName,
-          });
-        }
-      });
-    });
+    const finalColors = extractUniqueColors(colorsData);
 
     const priceOptions = [
       { id: 1,label: "$0 - $99",min_price: 0,max_price: 99 },
@@ -3956,7 +3890,7 @@ const generateBabyTryOn = async (req,res,next) => {
         if(!BabyProfileData?.baby_profile_image) {
           throw new CoustomError("You don't have a image of this baby",400)
         }
-        baby_img_url = `${process.env.BACKEND_URL}/baby-image/${BabyProfileData.baby_profile_image}`
+        baby_img_url = formatImageUrl(BabyProfileData.baby_profile_image, "baby-image")
         const productData = await Product.findOne({
           where: {
             id: product_id
@@ -4089,11 +4023,7 @@ const allFitingRoomProduct = async (req,res,next) => {
     const formattedBabyData = BabyDataForRes.map((baby) => {
       return {
         ...baby,
-        baby_profile_image: baby.baby_profile_image
-          ? baby.baby_profile_image.startsWith("http")
-            ? baby.baby_profile_image
-            : `${process.env.BACKEND_URL}/baby-image/${baby.baby_profile_image}`
-          : null,
+        baby_profile_image: formatImageUrl(baby.baby_profile_image, "baby-image") || null,
 
         selected: userData && userData.selected_baby && String(baby.id) === String(userData.selected_baby)
           ? true
