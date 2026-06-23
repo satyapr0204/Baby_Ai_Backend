@@ -28,6 +28,7 @@ const Order = require("../../modals/orderModal");
 const Address = require("../../modals/addressModal");
 const Transaction = require("../../modals/transactionModal");
 const SubscriberShema = require("../../modals/subscriberModal");
+const { safeJsonParse, formatImageUrl, snakeToTitleCase } = require("../../utils/sharedHelpers");
 
 const processBabyData = async (data) => {
   if (!data) return data;
@@ -55,12 +56,8 @@ const processBabyData = async (data) => {
   let colorIds = new Set();
 
   const parseIds = (val) => {
-    try {
-      const p = typeof val === "string" ? JSON.parse(val || "[]") : val;
-      return Array.isArray(p) ? p : [];
-    } catch {
-      return [];
-    }
+    const p = safeJsonParse(val, []);
+    return Array.isArray(p) ? p : [];
   };
 
   babiesToProcess.forEach((baby) => {
@@ -113,11 +110,8 @@ const processBabyData = async (data) => {
 
   babiesToProcess.forEach((baby) => {
     console.log("baby", baby)
-    if (
-      baby.baby_profile_image &&
-      !baby.baby_profile_image.startsWith("http")
-    ) {
-      baby.baby_profile_image = `${process.env.BACKEND_URL}/baby-image/${baby.baby_profile_image}`;
+    if (baby.baby_profile_image) {
+      baby.baby_profile_image = formatImageUrl(baby.baby_profile_image, "baby-image");
       baby.id = baby.id
     }
 
@@ -209,15 +203,9 @@ const updateGlobalStatus = async (req, res, next) => {
       is_active: record.is_active == 1 ? 0 : 1,
     });
 
-    const formattedType = type
-      .replace(/_/g, " ")
-      .split(" ")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
-
     sendResponse(
       res,
-      `${formattedType} has been ${record.is_active == 1 ? "Activted" : "Deactivated"} successfully!`,
+      `${snakeToTitleCase(type)} has been ${record.is_active == 1 ? "Activted" : "Deactivated"} successfully!`,
       200,
     );
   } catch (error) {
@@ -235,12 +223,6 @@ const globalDelete = async (req, res, next) => {
       flash_message: FlashMessage,
     };
 
-    const formattedType = type
-      .replace(/_/g, " ")
-      .split(" ")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
-
     const imageFieldsMap = {
       banner: "banner_url",
     };
@@ -253,7 +235,7 @@ const globalDelete = async (req, res, next) => {
     });
 
     if (!record) {
-      throw new CoustomError(`${formattedType} not found`, 404);
+      throw new CoustomError(`${snakeToTitleCase(type)} not found`, 404);
     }
 
     if (imageFieldsMap[type]) {
@@ -270,7 +252,7 @@ const globalDelete = async (req, res, next) => {
       }
     }
     await record.destroy();
-    sendResponse(res, `${formattedType} deleted successfully!`, 200);
+    sendResponse(res, `${snakeToTitleCase(type)} deleted successfully!`, 200);
   } catch (error) {
     next(error);
   }
@@ -1218,9 +1200,7 @@ const allBanners = async (req, res, next) => {
     }
     const allBanners = banners.map((banner) => {
       const bannerJson = banner.toJSON();
-      if (bannerJson.banner_url) {
-        bannerJson.banner_url = `${process.env.BACKEND_URL}/banners/${bannerJson.banner_url}`;
-      }
+      bannerJson.banner_url = formatImageUrl(bannerJson.banner_url, "banners");
       return bannerJson;
     });
     sendResponse(res, "Banners retrieved successfully!", 200, { allBanners });
