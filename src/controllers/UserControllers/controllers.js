@@ -1,70 +1,92 @@
+const { Op, Sequelize } = require("sequelize");
 const FASHN_API_KEY = process.env.FASHN_API_KEY;
 const FASHN_BASE_URL = process.env.FASHN_AI_BASE_URL;
-const User = require("../../modals/userModal");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+const jwt = require("jsonwebtoken");
+const { Country, State } = require("country-state-city");
+const { OpenAI } = require("openai");
+const crypto = require("crypto");
+const path = require("path");
 const fs = require("fs").promises;
 const fs1 = require("fs");
-const { OpenAI } = require("openai");
+const axios = require("axios");
+const sharp = require("sharp");
+
+// All Modals Require
+const User = require("../../modals/userModal");
 const CoustomError = require("../../utils/CoustomError");
-const jwt = require("jsonwebtoken");
-const { sendResponse } = require("../../utils/coustomResponse");
-const crypto = require("crypto");
-const { sendOtpOnEmail } = require("../../utils/sendMailServices");
 const BabyProfile = require("../../modals/babyProfileModal");
 const Banner = require("../../modals/bannerModal");
 const { Wishlist } = require("../../modals/userWishlistModal");
-const { getPagination,getPagingData } = require("../../utils/pagination");
 const Product = require("../../modals/ProductModal/product");
 const Address = require("../../modals/addressModal");
-const path = require("path");
 const Cart = require("../../modals/cartModal");
 const Category = require("../../modals/ProductModal/category");
 const Fabric = require("../../modals/ProductModal/fabric");
-const { Op,Sequelize } = require("sequelize");
-const Retailer = require("../../modals/ProductModal/retailer");
-const { getCalculatedProducts } = require("../../utils/PriceHelper");
 const Color = require("../../modals/ProductModal/color");
 const Size = require("../../modals/ProductModal/size");
-const { processBabyData } = require("../AdminControllers/controllers");
 const Gender = require("../../modals/ProductModal/gender");
-const Brand = require("../../modals/ProductModal/brand");
-const axios = require("axios");
-const sharp = require("sharp");
 const StaticPage = require("../../modals/staticPageModal");
 const Order = require("../../modals/orderModal");
 const Transaction = require("../../modals/transactionModal");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const { Country,State } = require("country-state-city");
-const { formatFullAddress } = require("../../utils/getFullAddress");
-const { createOrder,trackOrder } = require("../../utils/bambiniService");
-const {
-  getCalculatedProductsWithSuffling,
-} = require("../../utils/calclutePricewithSuffaling");
-const { paginateArray } = require("../../utils/paginateArray");
 const Plan = require("../../modals/planModal");
 const Subscriber = require("../../modals/subscriberModal");
-const { sortProductsByBabyPreference } = require("../../utils/preferenceSorter");
-const { saveOutputImage } = require("../../utils/saveOutputImage");
 const { BabyTRYON } = require("../../modals/babyTryOn");
 const ProductAIImage = require("../../modals/ProductModal/productGenratedImage");
 const recentSearch = require("../../modals/ProductModal/recentlySearch");
+const Notifications = require('../../modals/notificationModal')
 
-const client = new OpenAI({
-  apiKey: process.env.OPEN_AI_KEY,
-});
+// Services from utils
+const { sendOtpOnEmail } = require("../../utils/sendMailServices");
+const { sendResponse } = require("../../utils/coustomResponse");
+const { getPagination, getPagingData } = require("../../utils/pagination");
+const { getCalculatedProducts } = require("../../utils/PriceHelper");
+const { formatFullAddress } = require("../../utils/getFullAddress");
+const { getCalculatedProductsWithSuffling } = require("../../utils/calclutePricewithSuffaling");
+const { createOrder, trackOrder } = require("../../utils/bambiniService");
+const { paginateArray } = require("../../utils/paginateArray");
+const { sortProductsByBabyPreference } = require("../../utils/preferenceSorter");
+const { saveOutputImage } = require("../../utils/saveOutputImage");
 
-const getBase64FromUrl = async (url,customHeaders = {}) => {
-  const response = await axios.get(url,{
+// Controllers
+const { processBabyData } = require("../AdminControllers/controllers");
+const { handleCheckoutSessionCompleted, handleChargeSucceeded, handleInvoicePaid, handleInvoicePaymentFailed,
+  handleSubscriptionCreated, handleSubscriptionUpdated, handleSubscriptionDeleted,
+  handlePaymentIntentFailed,
+  handleCheckoutSessionExpired } = require("../../services/paymentService");
+const { Twilio } = require("twilio");
+
+const client = new OpenAI({ apiKey: process.env.OPEN_AI_KEY });
+const twilio_client = new Twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
+// Functions
+async function sendSMS(phoneNumber, otp) {
+  try {
+    await twilio_client.messages.create({
+      body: `Your verification code for Baby Ai is ${otp}. This code is valid for 30 secound. Please do not share it with anyone.`,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: phoneNumber
+    });
+    console.log("SMS sent!");
+  } catch (error) {
+    console.error("SMS error:", error);
+  }
+}
+
+const getBase64FromUrl = async (url, customHeaders = {}) => {
+  const response = await axios.get(url, {
     responseType: "arraybuffer",
     headers: customHeaders,
   });
-  const buffer = Buffer.from(response.data,"binary");
+  const buffer = Buffer.from(response.data, "binary");
   const mimeType = response.headers["content-type"];
   return `data:${mimeType};base64,${buffer.toString("base64")}`;
 };
 
-const createStripeCustomer = async (user_id,name,email) => {
+const createStripeCustomer = async (user_id, name, email) => {
   try {
-    console.log("user_id, name, email",user_id,name,email);
+    console.log("user_id, name, email", user_id, name, email);
     const customer = await stripe.customers.create({
       name: name,
       email: email,
@@ -72,133 +94,163 @@ const createStripeCustomer = async (user_id,name,email) => {
         user_id: user_id,
       },
     });
-    if(customer) {
+    if (customer) {
       return customer.id;
     }
-  } catch(error) {
+  } catch (error) {
     throw new error("Helper error at createStripeCustomer: " + error.message);
   }
 };
 
-const genrateOtpAndToken = async (input,name,channel,country_code) => {
-  const otp = crypto.randomInt(10000,99999).toString();
-  console.log("otp",otp);
+const stripeWebhook = async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  console.log("sig", sig)
+  let event;
+  try {
+    console.log("event")
+    // event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    event = stripe.webhooks.constructEvent(req.rawBody, sig, endpointSecret);
+  } catch (err) {
+    console.log("err", err)
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed':
+        console.log('here with step 1');
+        await handleCheckoutSessionCompleted(event.data.object);
+        break;
+      case 'charge.succeeded':
+        console.log('here with step 2');
+        await handleChargeSucceeded(event.data.object);
+        break;
+      case 'invoice.paid':
+        console.log('here with step 3');
+        await handleInvoicePaid(event.data.object);
+        break;
+
+      case 'invoice.payment_failed':
+        console.log('here with step 4');
+        await handleInvoicePaymentFailed(event.data.object);
+        break;
+
+      case 'customer.subscription.created':
+        console.log('here with step 5');
+        await handleSubscriptionCreated(event.data.object);
+        break;
+
+      case 'customer.subscription.updated':
+        console.log('here with step 6');
+        await handleSubscriptionUpdated(event.data.object);
+        break;
+
+      case 'customer.subscription.deleted':
+        console.log('here with step 7');
+        await handleSubscriptionDeleted(event.data.object);
+        break;
+
+      case 'payment_intent.payment_failed':
+        console.log('here with step 8');
+        await handlePaymentIntentFailed(event.data.object);
+        break;
+
+      case 'checkout.session.expired':
+        console.log('here with step 9');
+        await handleCheckoutSessionExpired(event.data.object);
+        break;
+    }
+    res.status(200).json({ received: true });
+  } catch (err) {
+    res.status(500).send('Webhook processing failed.');
+  }
+};
+
+const genrateOtpAndToken = async (input, name, channel, country_code) => {
+  const otp = crypto.randomInt(10000, 99999).toString();
+  console.log("otp", otp);
   const expiryToken = await jwt.sign(
-    { input,otp,channel,name,country_code },
+    { input, otp, channel, name, country_code },
     process.env.JWT_SECRET,
     { expiresIn: "1m" },
   );
-  return { otp,expiryToken };
-};
-
-const proxyImage = async (req,res) => {
-  try {
-    const { url } = req.query;
-    console.log("url",url);
-    if(!url) return res.status(400).send("URL missing");
-
-    const response = await axios({
-      method: "get",
-      url: url,
-      headers: {
-        "X-App-ID": "BabyAiApp-Frontend-v1",
-      },
-    });
-    console.log("response",response);
-    res.setHeader(
-      "Content-Type",
-      response.headers["content-type"] || "image/jpeg",
-    );
-    response.data.pipe(res);
-  } catch(error) {
-    console.log("error",error);
-    console.error("Proxy Error:",error.message);
-    res.status(500).send("Image fetch failed");
-  }
-};
-
-const ensureHttps = (data) => {
-  if(!data) return data;
-  const proxyBaseUrl =
-    "https://bridgeable-erinn-overluxuriously.ngrok-free.dev/proxy-image?url=";
-  const getProxyUrl = (originalUrl) => {
-    return `${proxyBaseUrl}${encodeURIComponent(originalUrl)}`;
-  };
-  if(Array.isArray(data)) {
-    return data.map((url) => getProxyUrl(url));
-  }
-  return getProxyUrl(data);
+  return { otp, expiryToken };
 };
 
 // User Subscription and payment related controllers
-const createCheckoutSessionForSubscription = async (req,res,next) => {
+const createCheckoutSessionForSubscription = async (req, res, next) => {
   try {
     const { id } = req.body;
     const user_id = req.user.id;
 
     const existingSubscription = await Subscriber.findOne({
       where: {
-        user_id,
-        status: "active"
+        user_id: user_id,
+        plan_id: id,
+        status: "active",
+        end_date: {
+          [Op.gt]: new Date()
+        }
       },
     });
+
+    if (existingSubscription) throw new CoustomError(`You already have an active plan or it's not expired at`, 400)
+
+    const stripeSub = await stripe.subscriptions.retrieve(existingSubscription.stripe_subscription_id);
+    const isScheduledForCancellation = stripeSub.cancel_at_period_end;
+
+    const currectPlan = await Plan.findOne({
+      where: {
+        id: existingSubscription.plan_id,
+      }
+    })
+
     const subbscriptionPlan = await Plan.findOne({
       where: { id },
     });
 
-    const existingPlansCount = await Subscriber.count({
-      where: {
-        user_id,
-        status: ['active','scheduled']
+    if (!subbscriptionPlan || !subbscriptionPlan.stripe_price_id) {
+      throw new CoustomError("Plan not found", 400);
+    }
+
+    if (currectPlan.id == subbscriptionPlan.id)
+
+      // 3. Validation
+      if (currectPlan.is_premium) {
+        if (!isScheduledForCancellation) {
+          if (subbscriptionPlan.id === currectPlan.id || !subbscriptionPlan.is_premium) {
+            throw new CoustomError("Your primume plan already activate now!, you need to cancle first for downgrade.", 400);
+          }
+        }
       }
-    });
-    if(existingPlansCount >= 2) {
-      throw new CoustomError(
-        "You already have an active plan and a scheduled plan in queue. You cannot add more plans until the current one expires.",
-        400
-      );
-    }
 
-    if(!subbscriptionPlan || !subbscriptionPlan.stripe_price_id) {
-      throw new CoustomError("Plan not found",400);
-    }
-    const planDuration = subbscriptionPlan.interval || (subbscriptionPlan.plan_name?.toLowerCase().includes('year') ? 'year' : 'month');
-
+    const planDuration = subbscriptionPlan.interval || "month";
     const now = new Date();
 
-    const activeSub = await Subscriber.findOne({
-      where: { user_id,status: 'active' }
-    });
-
-
-    let checkoutAction = "purchase_subscription";
-    if(activeSub) {
-      console.log(`User ${user_id} has 1 active plan. Setting action to schedule the next one.`);
-      checkoutAction = "upgrade_to_yearly_scheduled";
-    }
+    let checkoutAction = "subscription";
 
     const customer = await User.findOne({
       where: {
         id: user_id,
       },
     });
-    // console.log("customer", customer)
+
     let stripe_customer_id = null;
-    if(!customer || customer.length <= 0) {
-      throw new CoustomError("User not found",404);
+    if (!customer || customer.length <= 0) {
+      throw new CoustomError("User not found", 404);
     }
 
-    if(customer.stripe_customer_id) {
+    if (customer.stripe_customer_id) {
       stripe_customer_id = customer.stripe_customer_id;
     } else {
       stripe_customer_id = await createStripeCustomer(
         customer.id,
         customer.name,
-        customer.email,
+        customer.email || customer.phone,
       );
 
-      if(!stripe_customer_id) {
-        throw new CoustomError("Stripe customer id not found",400);
+      if (!stripe_customer_id) {
+        throw new CoustomError("Stripe customer id not found", 400);
       }
 
       await User.update(
@@ -210,42 +262,14 @@ const createCheckoutSessionForSubscription = async (req,res,next) => {
         },
       );
     }
-
-    // const isFirstTimeUser = !existingSubscription;
-    // const session = await stripe.checkout.sessions.create({
-    //   customer: stripe_customer_id,
-    //   payment_method_types: ["card"],
-    //   mode: "subscription",
-    //   line_items: [
-    //     {
-    //       price: subbscriptionPlan.stripe_price_id,
-    //       quantity: 1,
-    //     },
-    //   ],
-
-    //   metadata: {
-    //     userId: customer.id.toString(),
-    //     userName: customer.name,
-    //     planId: subbscriptionPlan.id.toString(),
-    //     isSubscription: "true",
-    //   },
-    //   success_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-    //   cancel_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-    // });
-
     const priceDetails = await stripe.prices.retrieve(subbscriptionPlan.stripe_price_id);
     const session = await stripe.checkout.sessions.create({
       customer: stripe_customer_id,
       payment_method_types: ["card"],
-      mode: "payment",
-      // line_items: [{ price: subbscriptionPlan.stripe_price_id, quantity: 1 }],
+      mode: "subscription",
       line_items: [
         {
-          price_data: {
-            currency: priceDetails.currency,
-            product: priceDetails.product,
-            unit_amount: priceDetails.unit_amount,
-          },
+          price: subbscriptionPlan.stripe_price_id,
           quantity: 1,
         },
       ],
@@ -260,26 +284,39 @@ const createCheckoutSessionForSubscription = async (req,res,next) => {
       success_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
     });
-    return sendResponse(res,"Checkout session created successfully",200,{
+    return sendResponse(res, "Checkout session created successfully", 200, {
       session: session.url,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const sendOtpForLogin = async (req,res,next) => {
+const createCheckoutSessionAddOnePlan = async (req, res, next) => {
   try {
-    const { input,name,channel,country_code } = req.body;
-    if(!input || !name || !channel)
+    const user_id = req.user.id;
+    const { id } = req.body
+
+
+
+  } catch (error) {
+    next(error)
+  }
+}
+
+
+const sendOtpForLogin = async (req, res, next) => {
+  try {
+    const { input, name, channel, country_code } = req.body;
+    if (!input || !name || !channel)
       throw new CoustomError("Email Or Phone is required");
-    const { otp,expiryToken } = await genrateOtpAndToken(
+    const { otp, expiryToken } = await genrateOtpAndToken(
       input,
       name,
       channel,
       country_code,
     );
-    if(channel === "email") {
+    if (channel === "email") {
       const mailOptions = {
         from: process.env.GMAIL_USER,
         to: input,
@@ -288,7 +325,7 @@ const sendOtpForLogin = async (req,res,next) => {
                 `,
       };
       await sendOtpOnEmail(mailOptions);
-    } else if(channel === "phone") {
+    } else if (channel === "phone") {
       const phoneStr = req.body.input.toString();
       // if (!phoneStr.startsWith("+")) {
       //   throw new CoustomError(
@@ -296,49 +333,49 @@ const sendOtpForLogin = async (req,res,next) => {
       //     400,
       //   );
       // }
-      const digitsOnly = phoneStr.replace(/\D/g,"");
+      const digitsOnly = phoneStr.replace(/\D/g, "");
       // if (digitsOnly.length < 10 || digitsOnly.length > 15) {
       //   throw new CoustomError("Invalid phone number length", 400);
       // }
     }
     console.log(`OTP for ${input}: ${otp}`);
-    return sendResponse(res,"OTP sent! Valid for 30 seconds.",200,{
+    return sendResponse(res, "OTP sent! Valid for 30 seconds.", 200, {
       token: expiryToken,
       otp: otp,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const verifyOtp = async (req,res,next) => {
+const verifyOtp = async (req, res, next) => {
   try {
-    const { input,otp,token,device_type,fcm_token } = req.body;
-    if(!token || !input || !otp || !device_type || !fcm_token)
-      throw new CoustomError("All fields are required",400);
+    const { input, otp, token, device_type, fcm_token } = req.body;
+    if (!token || !input || !otp || !device_type || !fcm_token)
+      throw new CoustomError("All fields are required", 400);
     let decoded;
     try {
-      decoded = jwt.verify(token,process.env.JWT_SECRET);
-    } catch(err) {
-      if(err.name === "TokenExpiredError") {
-        return next(new CoustomError("OTP has expired (30s limit)",200));
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      if (err.name === "TokenExpiredError") {
+        return next(new CoustomError("OTP has expired (30s limit)", 200));
       }
-      return next(new CoustomError("Invalid or corrupted token",200));
+      return next(new CoustomError("Invalid or corrupted token", 200));
     }
 
-    if(decoded.input !== input || decoded.otp !== otp) {
-      return next(new CoustomError("Invalid OTP",200));
+    if (decoded.input !== input || decoded.otp !== otp) {
+      return next(new CoustomError("Invalid OTP", 200));
     }
 
     let user;
     const whereCondition =
       decoded.channel === "email"
-        ? { email: input.toLowerCase(),is_delete: 0 }
-        : { phone: input,is_delete: 0,country_code: decoded.country_code };
+        ? { email: input.toLowerCase(), is_delete: 0 }
+        : { phone: input, is_delete: 0, country_code: decoded.country_code };
 
     user = await User.findOne({ where: whereCondition });
 
-    if(!user) {
+    if (!user) {
       const createData = {
         name: decoded.name,
         fcm_token: fcm_token,
@@ -346,7 +383,7 @@ const verifyOtp = async (req,res,next) => {
       };
       user = await User.create(createData);
     } else {
-      if(user.is_active === 0 || user.is_delete === 1) {
+      if (user.is_active === 0 || user.is_delete === 1) {
         return next(
           new CoustomError(
             "Your account is inactive or deleted. Please contact support.",
@@ -356,7 +393,7 @@ const verifyOtp = async (req,res,next) => {
       }
     }
     let BabyProfileData;
-    if(user.is_profile_complete === 0) {
+    if (user.is_profile_complete === 0) {
       BabyProfileData = await BabyProfile.findAll({
         where: {
           user_id: user.id,
@@ -367,30 +404,31 @@ const verifyOtp = async (req,res,next) => {
       id: user.id,
       contact: user.email || user.phone,
       name: user.name,
+      phone: user.phone
     };
 
-    const accessToken = jwt.sign(userInfo,process.env.JWT_SECRET,{
+    const accessToken = jwt.sign(userInfo, process.env.JWT_SECRET, {
       expiresIn: "24h",
     });
 
-    return sendResponse(res,"Verified successfully!",200,{
+    return sendResponse(res, "Verified successfully!", 200, {
       user: user,
       ...(BabyProfileData && { baby_profile: BabyProfileData }),
       access_token: accessToken,
     });
-  } catch(error) {
-    console.error("Error verifying OTP:",error);
+  } catch (error) {
+    console.error("Error verifying OTP:", error);
     next(error);
   }
 };
 
-const sendOtpForUpdatePhoneEmail = async (req,res,next) => {
+const sendOtpForUpdatePhoneEmail = async (req, res, next) => {
   try {
     const { name } = req.user;
-    const { input,channel,country_code } = req.body;
-    if(!input || !channel)
-      throw new CoustomError("Email Or Phone is required",400);
-    const { otp,expiryToken } = await genrateOtpAndToken(
+    const { input, channel, country_code } = req.body;
+    if (!input || !channel)
+      throw new CoustomError("Email Or Phone is required", 400);
+    const { otp, expiryToken } = await genrateOtpAndToken(
       input,
       name,
       channel,
@@ -399,13 +437,13 @@ const sendOtpForUpdatePhoneEmail = async (req,res,next) => {
     const isAlreadyExist = await User.findOne({
       where:
         channel === "email"
-          ? { email: input,is_delete: 0 }
-          : { phone: input,is_delete: 0,country_code: country_code },
+          ? { email: input, is_delete: 0 }
+          : { phone: input, is_delete: 0, country_code: country_code },
     });
-    if(isAlreadyExist)
-      throw new CoustomError(`This ${channel} is already registered.`,404);
+    if (isAlreadyExist)
+      throw new CoustomError(`This ${channel} is already registered.`, 404);
 
-    if(channel === "email") {
+    if (channel === "email") {
       const mailOptions = {
         from: process.env.GMAIL_USER,
         to: input,
@@ -414,36 +452,36 @@ const sendOtpForUpdatePhoneEmail = async (req,res,next) => {
                 `,
       };
       await sendOtpOnEmail(mailOptions);
-    } else if(channel === "phone") {
+    } else if (channel === "phone") {
       const phoneStr = req.body.input.toString();
     }
     console.log(`OTP for ${input}: ${otp}`);
-    return sendResponse(res,"OTP sent! Valid for 30 seconds.",200,{
+    return sendResponse(res, "OTP sent! Valid for 30 seconds.", 200, {
       token: expiryToken,
       otp: otp,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const verifyPhoneEmailForUpdate = async (req,res,next) => {
+const verifyPhoneEmailForUpdate = async (req, res, next) => {
   try {
-    const { otp,token } = req.body;
+    const { otp, token } = req.body;
     const { id } = req.user;
-    if(!otp || !token)
-      throw new CoustomError("OTP and token are required",400);
+    if (!otp || !token)
+      throw new CoustomError("OTP and token are required", 400);
     let decoded;
     try {
-      decoded = jwt.verify(token,process.env.JWT_SECRET);
-    } catch(err) {
-      if(err.name === "TokenExpiredError") {
-        return next(new CoustomError("OTP has expired (30s limit)",400));
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      if (err.name === "TokenExpiredError") {
+        return next(new CoustomError("OTP has expired (30s limit)", 400));
       }
-      return next(new CoustomError("Invalid or corrupted token",400));
+      return next(new CoustomError("Invalid or corrupted token", 400));
     }
-    if(decoded.otp !== otp) {
-      return next(new CoustomError("Invalid OTP",400));
+    if (decoded.otp !== otp) {
+      return next(new CoustomError("Invalid OTP", 400));
     }
     let user;
     let input = decoded.input;
@@ -454,39 +492,39 @@ const verifyPhoneEmailForUpdate = async (req,res,next) => {
         is_delete: 0,
       },
     });
-    if(!user) throw new CoustomError(`User not found.`,404);
+    if (!user) throw new CoustomError(`User not found.`, 404);
     const updateData =
       decoded.channel === "email"
         ? { email: input.toLowerCase() }
-        : { phone: input,country_code: country_code };
+        : { phone: input, country_code: country_code };
     await user.update(updateData);
 
-    return sendResponse(res,`${decoded.channel} updated successfully!`,200,{
+    return sendResponse(res, `${decoded.channel} updated successfully!`, 200, {
       user: user,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const fabricList = async (req,res,next) => {
+const fabricList = async (req, res, next) => {
   try {
     const allFabricList = await Fabric.findAll();
-    if(!allFabricList) throw new CoustomError("Fabric list not found",404);
-    sendResponse(res,"Fetching all Fabric",200,{
+    if (!allFabricList) throw new CoustomError("Fabric list not found", 404);
+    sendResponse(res, "Fetching all Fabric", 200, {
       allFabricList,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const colorsPreferenceList = async (req,res,next) => {
+const colorsPreferenceList = async (req, res, next) => {
   try {
     const allColorList = await Color.findAll();
 
-    if(!allColorList)
-      throw new CoustomError("Color preference not found!",404);
+    if (!allColorList)
+      throw new CoustomError("Color preference not found!", 404);
 
     let uniqueColors = new Set();
     let finalColors = [];
@@ -498,7 +536,7 @@ const colorsPreferenceList = async (req,res,next) => {
 
       splitNames.forEach((name) => {
         const trimmedName = name.trim();
-        if(
+        if (
           !uniqueColors.has(trimmedName.toLowerCase()) &&
           isNaN(trimmedName)
         ) {
@@ -511,20 +549,20 @@ const colorsPreferenceList = async (req,res,next) => {
       });
     });
 
-    sendResponse(res,"Fetching all color list",200,{
+    sendResponse(res, "Fetching all color list", 200, {
       allColorList: finalColors,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const getAllPreferencesData = async (req,res,next) => {
+const getAllPreferencesData = async (req, res, next) => {
   try {
-    const [colorsData,sizes,febrics] = await Promise.all([
-      Color.findAll({ attributes: { exclude: ["createdAt","updatedAt"] } }),
-      Size.findAll({ attributes: { exclude: ["createdAt","updatedAt"] } }),
-      Fabric.findAll({ attributes: { exclude: ["createdAt","updatedAt"] } }),
+    const [colorsData, sizes, febrics] = await Promise.all([
+      Color.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
+      Size.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
+      Fabric.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
     ]);
 
     let uniqueColors = new Set();
@@ -537,7 +575,7 @@ const getAllPreferencesData = async (req,res,next) => {
 
       splitNames.forEach((name) => {
         const trimmedName = name.trim();
-        if(
+        if (
           !uniqueColors.has(trimmedName.toLowerCase()) &&
           isNaN(trimmedName)
         ) {
@@ -550,30 +588,30 @@ const getAllPreferencesData = async (req,res,next) => {
       });
     });
 
-    sendResponse(res,"Fetching all preferences data",200,{
+    sendResponse(res, "Fetching all preferences data", 200, {
       colors: finalColors,
       sizes,
       fabrics: febrics,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const getAllSizes = async (req,res,next) => {
+const getAllSizes = async (req, res, next) => {
   try {
     const allSizeList = await Size.findAll();
-    if(!allSizeList)
-      throw new CoustomError("Color preference not found!",404);
-    sendResponse(res,"Fetching all color list",200,{
+    if (!allSizeList)
+      throw new CoustomError("Color preference not found!", 404);
+    sendResponse(res, "Fetching all color list", 200, {
       allSizeList,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const userProfile = async (req,res,next) => {
+const userProfile = async (req, res, next) => {
   try {
     const { id } = req.user;
     const userData = await User.findOne({
@@ -603,18 +641,18 @@ const userProfile = async (req,res,next) => {
         {
           model: Subscriber,
           as: 'subscribers',
-          attributes: ["start_date","status","end_date"],
+          attributes: ["start_date", "status", "end_date"],
           required: false,
         }
       ],
     });
-    if(!userData) {
-      throw new CoustomError("User not found!",404);
+    if (!userData) {
+      throw new CoustomError("User not found!", 404);
     }
 
 
     const userSub = userData.get({ plain: true });
-    const { subscribers,...restUserData } = userSub;
+    const { subscribers, ...restUserData } = userSub;
     const sub = Array.isArray(subscribers) ? subscribers[0] : subscribers;
 
     const user = await processBabyData(restUserData);
@@ -628,15 +666,15 @@ const userProfile = async (req,res,next) => {
       } : null
     };
 
-    sendResponse(res,"User and all baby profiles fetched successfully",200,{
+    sendResponse(res, "User and all baby profiles fetched successfully", 200, {
       user: userDetails,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const updateBabyProfileWithStep = async (req,res,next) => {
+const updateBabyProfileWithStep = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const {
@@ -651,15 +689,15 @@ const updateBabyProfileWithStep = async (req,res,next) => {
     } = req.body;
 
     let baby_profile_image;
-    console.log("req.body",req.body);
-    if(req.file) {
+    console.log("req.body", req.body);
+    if (req.file) {
       baby_profile_image = req.file.filename;
-      console.log("baby_profile_image in side if",baby_profile_image);
+      console.log("baby_profile_image in side if", baby_profile_image);
     } else {
       baby_profile_image = null;
     }
     let newBaby;
-    if(!step && id) {
+    if (!step && id) {
       const babyDataWithUser = await BabyProfile.findOne({
         where: {
           id,
@@ -672,7 +710,7 @@ const updateBabyProfileWithStep = async (req,res,next) => {
         },
       });
 
-      if(babyDataWithUser) {
+      if (babyDataWithUser) {
         const parsedFabrics =
           typeof fabric_preferences === "string"
             ? JSON.parse(fabric_preferences)
@@ -717,29 +755,29 @@ const updateBabyProfileWithStep = async (req,res,next) => {
           babyDataWithUser,
         );
       } else {
-        throw new CoustomError("Baby profile not found",404);
+        throw new CoustomError("Baby profile not found", 404);
       }
-    } else if(!step && !id) {
+    } else if (!step && !id) {
       const existingBabyProfile = await BabyProfile.findAll({
         where: {
           user_id,
         },
       });
-      console.log("existingBabyProfile.length",existingBabyProfile.length);
-      if(existingBabyProfile.length >= 3)
-        throw new CoustomError("You can add only 3 baby profiles",400);
+      console.log("existingBabyProfile.length", existingBabyProfile.length);
+      if (existingBabyProfile.length >= 3)
+        throw new CoustomError("You can add only 3 baby profiles", 400);
 
-      if(
+      if (
         !baby_nikname ||
         !age_range ||
         !baby_gender ||
         !fabric_preferences ||
         !preferred_colors
       ) {
-        if(req.file) {
+        if (req.file) {
           await fs.unlink(req.file.path);
         }
-        throw new CoustomError("All fields are required",400);
+        throw new CoustomError("All fields are required", 400);
       }
       const parsedFabrics =
         typeof fabric_preferences === "string"
@@ -759,9 +797,9 @@ const updateBabyProfileWithStep = async (req,res,next) => {
         user_id,
       });
 
-      if(userData.selected_baby === 0) {
+      if (userData.selected_baby === 0) {
         const totalBabyCount = await BabyProfile.count({ where: { user_id } });
-        if(totalBabyCount === 1) {
+        if (totalBabyCount === 1) {
           const singleBaby = await BabyProfile.findOne({
             where: { user_id },
             attributes: ['id']
@@ -784,177 +822,227 @@ const updateBabyProfileWithStep = async (req,res,next) => {
         200,
       );
     }
-    switch(step) {
-    case "1":
-      if(!baby_nikname || !age_range)
-        throw new CoustomError("Nickname and Age are required!",400);
-      if(id) {
-        const is_baby = await BabyProfile.findOne({
+    switch (step) {
+      case "1":
+        if (!baby_nikname || !age_range)
+          throw new CoustomError("Nickname and Age are required!", 400);
+        if (id) {
+          const is_baby = await BabyProfile.findOne({
+            where: {
+              id,
+              user_id,
+            },
+          });
+          if (is_baby) {
+            newBaby = await is_baby.update({
+              baby_nikname: baby_nikname ? baby_nikname : is_baby.baby_nikname,
+              age_range: age_range ? age_range : is_baby.age_range,
+            });
+          } else {
+            throw new CoustomError("Your baby id is wrong", 400);
+          }
+        } else {
+          newBaby = await BabyProfile.create({
+            baby_nikname,
+            age_range,
+            user_id,
+          });
+        }
+        return sendResponse(
+          res,
+          "Step 1 is complated now go to step 2",
+          200,
+          newBaby,
+        );
+      case "2":
+        if (!baby_gender || !id) {
+          const missingField = !baby_gender ? "Gender" : "ID";
+          throw new CoustomError(`${missingField} is required!`, 400);
+        }
+
+        const baby = await BabyProfile.findOne({
           where: {
             id,
             user_id,
           },
         });
-        if(is_baby) {
-          newBaby = await is_baby.update({
-            baby_nikname: baby_nikname ? baby_nikname : is_baby.baby_nikname,
-            age_range: age_range ? age_range : is_baby.age_range,
-          });
-        } else {
-          throw new CoustomError("Your baby id is wrong",400);
-        }
-      } else {
-        newBaby = await BabyProfile.create({
-          baby_nikname,
-          age_range,
-          user_id,
+        if (!baby) throw new CoustomError("Baby not found", 404);
+        console.log("baby_profile_image here", baby_profile_image);
+        await baby.update({
+          baby_gender,
+          baby_profile_image: baby_profile_image
+            ? baby_profile_image
+            : BabyProfile.baby_profile_image,
         });
-      }
-      return sendResponse(
-        res,
-        "Step 1 is complated now go to step 2",
-        200,
-        newBaby,
-      );
-    case "2":
-      if(!baby_gender || !id) {
-        const missingField = !baby_gender ? "Gender" : "ID";
-        throw new CoustomError(`${missingField} is required!`,400);
-      }
+        return sendResponse(
+          res,
+          "Step 2 is complated now go to step 3",
+          200,
+          baby,
+        );
 
-      const baby = await BabyProfile.findOne({
-        where: {
-          id,
-          user_id,
-        },
-      });
-      if(!baby) throw new CoustomError("Baby not found",404);
-      console.log("baby_profile_image here",baby_profile_image);
-      await baby.update({
-        baby_gender,
-        baby_profile_image: baby_profile_image
-          ? baby_profile_image
-          : BabyProfile.baby_profile_image,
-      });
-      return sendResponse(
-        res,
-        "Step 2 is complated now go to step 3",
-        200,
-        baby,
-      );
-
-    case "3":
-      // console.log("fabric_preferences",fabric_preferences)
-      if(!fabric_preferences || !id) {
-        const missingField = !fabric_preferences
-          ? "Fabric preferences"
-          : "ID";
-        throw new CoustomError(`${missingField} is required!`,400);
-        // throw new CoustomError("Fabric preferences are required!", 400);
-      }
-
-      const parsedFabrics =
-        typeof fabric_preferences === "string"
-          ? JSON.parse(fabric_preferences)
-          : fabric_preferences;
-
-      const babyProfileData = await BabyProfile.findOne({
-        where: {
-          id,
-          user_id,
-        },
-      });
-      if(!babyProfileData) throw new CoustomError("Baby not found",404);
-      await babyProfileData.update({
-        fabric_preferences: parsedFabrics,
-      });
-
-      return sendResponse(
-        res,
-        "Step 3 is complated now go to step 4",
-        200,
-        babyProfileData,
-      );
-    case "4":
-      if(!preferred_colors || !id) {
-        // throw CoustomError("Preferred colors are required!", 400);
-        const missingField = !preferred_colors ? "Preferred colors" : "ID";
-        throw new CoustomError(`${missingField} is required!`,400);
-      }
-      const parsedColors =
-        typeof preferred_colors === "string"
-          ? JSON.parse(preferred_colors)
-          : preferred_colors;
-      const babyPro = await BabyProfile.findOne({
-        where: {
-          id,
-          user_id,
-        },
-      });
-      if(!babyPro) throw new CoustomError("Baby not found",404);
-      await babyPro.update({
-        preferred_colors: parsedColors,
-      });
-      const userData = await User.findOne({
-        where: {
-          id: user_id,
-          is_delete: 0,
-        },
-      });
-      await userData.update({
-        is_profile_complete: 1,
-        is_new_user: 0,
-        current_step: 4,
-      });
-      let responseData = babyPro.toJSON();
-      if(responseData.fabric_preferences) {
-        try {
-          responseData.fabric_preferences =
-            typeof responseData.fabric_preferences === "string"
-              ? JSON.parse(responseData.fabric_preferences)
-              : responseData.fabric_preferences;
-        } catch(e) {
-          console.error("Fabric preferences parsing error:",e);
-          responseData.fabric_preferences = [];
+      case "3":
+        // console.log("fabric_preferences",fabric_preferences)
+        if (!fabric_preferences || !id) {
+          const missingField = !fabric_preferences
+            ? "Fabric preferences"
+            : "ID";
+          throw new CoustomError(`${missingField} is required!`, 400);
+          // throw new CoustomError("Fabric preferences are required!", 400);
         }
-      }
-      return sendResponse(
-        res,
-        "All steps are completed now",
-        200,
-        responseData,
-      );
-    default:
-      throw CoustomError("Invalid step provided!",400);
+
+        const parsedFabrics =
+          typeof fabric_preferences === "string"
+            ? JSON.parse(fabric_preferences)
+            : fabric_preferences;
+
+        const babyProfileData = await BabyProfile.findOne({
+          where: {
+            id,
+            user_id,
+          },
+        });
+        if (!babyProfileData) throw new CoustomError("Baby not found", 404);
+        await babyProfileData.update({
+          fabric_preferences: parsedFabrics,
+        });
+
+        return sendResponse(
+          res,
+          "Step 3 is complated now go to step 4",
+          200,
+          babyProfileData,
+        );
+      case "4":
+        if (!preferred_colors || !id) {
+          // throw CoustomError("Preferred colors are required!", 400);
+          const missingField = !preferred_colors ? "Preferred colors" : "ID";
+          throw new CoustomError(`${missingField} is required!`, 400);
+        }
+        const parsedColors =
+          typeof preferred_colors === "string"
+            ? JSON.parse(preferred_colors)
+            : preferred_colors;
+        const babyPro = await BabyProfile.findOne({
+          where: {
+            id,
+            user_id,
+          },
+        });
+        if (!babyPro) throw new CoustomError("Baby not found", 404);
+        await babyPro.update({
+          preferred_colors: parsedColors,
+        });
+        const userData = await User.findOne({
+          where: {
+            id: user_id,
+            is_delete: 0,
+          },
+        });
+        await userData.update({
+          is_profile_complete: 1,
+          is_new_user: 0,
+          current_step: 4,
+        });
+        let responseData = babyPro.toJSON();
+        if (responseData.fabric_preferences) {
+          try {
+            responseData.fabric_preferences =
+              typeof responseData.fabric_preferences === "string"
+                ? JSON.parse(responseData.fabric_preferences)
+                : responseData.fabric_preferences;
+          } catch (e) {
+            console.error("Fabric preferences parsing error:", e);
+            responseData.fabric_preferences = [];
+          }
+        }
+        return sendResponse(
+          res,
+          "All steps are completed now",
+          200,
+          responseData,
+        );
+      default:
+        throw CoustomError("Invalid step provided!", 400);
     }
-  } catch(error) {
-    if(req.file) {
+  } catch (error) {
+    if (req.file) {
       await fs.unlink(req.file.path);
     }
-    console.log("baby-profile-update-step error",error);
+    console.log("baby-profile-update-step error", error);
     next(error);
   }
 };
 
-const homeData = async (req,res,next) => {
+const homeData = async (req, res, next) => {
   try {
     const { id } = req.user;
+    // const userData = await User.findOne({
+    //   where: { id },
+    //   include: [{
+    //     model: Subscriber,
+    //     as: 'subscribers',
+    //     attributes: ["start_date","status","end_date"],
+    //     required: false,
+    //   }],
+    //   raw: true,
+    //   nest: true,
+    // });
+
+
     const userData = await User.findOne({
       where: { id },
       include: [{
         model: Subscriber,
         as: 'subscribers',
-        attributes: ["start_date","status","end_date"],
-        required: false,
+        attributes: ["start_date", "status", "end_date"],
+        required: false
+      }, {
+        model: BabyProfile,
+        as: 'babies',
+        include: [{
+          model: BabyTRYON,
+          as: 'tryOnBabys'
+        }]
       }],
-      raw: true,
-      nest: true,
+      // raw: true,
+      // nest: true,
+    });
+    const babies = userData.babies;
+    let allAvailableTryOns = [];
+    let maxTryons = 0;
+
+    babies.forEach(baby => {
+      if (baby.tryOnBabys) {
+        allAvailableTryOns.push(...baby.tryOnBabys);
+        if (baby.tryOnBabys.length > maxTryons) maxTryons = baby.tryOnBabys.length;
+      }
     });
 
-    if(!userData) {
-      return res.status(404).json({ success: false,message: "User not found" });
+    let result = [];
+    for (let i = 0; i < maxTryons; i++) {
+      for (let baby of babies) {
+        if (result.length >= 5) break;
+        if (baby.tryOnBabys && baby.tryOnBabys[i]) {
+          if (!result.includes(baby.tryOnBabys[i])) {
+            result.push(baby.tryOnBabys[i]);
+          }
+        }
+      }
+      if (result.length >= 5) break;
     }
-
+    if (result.length < 5) {
+      for (let item of allAvailableTryOns) {
+        if (result.length >= 5) break;
+        if (!result.includes(item)) {
+          result.push(item);
+        }
+      }
+    }
+    console.log("Final 5 TryOns:", result);
+    if (!userData) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
     const sub = Array.isArray(userData.subscribers) ? userData.subscribers[0] : userData.subscribers;
     const selectedBabyId = userData?.selected_baby;
     const userDetails = {
@@ -972,7 +1060,7 @@ const homeData = async (req,res,next) => {
       where: {
         user_id: id,
       },
-      attributes: ["id","baby_profile_image"],
+      attributes: ["id", "baby_profile_image"],
       raw: true,
     });
 
@@ -1004,9 +1092,9 @@ const homeData = async (req,res,next) => {
             : false,
         };
       })
-      .sort((a,b) => {
-        if(a.id === selectedBabyId) return -1;
-        if(b.id === selectedBabyId) return 1;
+      .sort((a, b) => {
+        if (a.id === selectedBabyId) return -1;
+        if (b.id === selectedBabyId) return 1;
         return 0;
       });
 
@@ -1028,45 +1116,13 @@ const homeData = async (req,res,next) => {
           as: "categories",
           attributes: ["product_images"],
           limit: 1,
-          order: [["id","ASC"]],
+          order: [["id", "ASC"]],
         },
       ],
     });
-    // const finalResponse = categoryShop.map((cat) => {
-    //   const item = cat.toJSON();
-    //   // console.log("item",item)
-    //  return item.name !== "Onezies";
-
-    //   let firstImage = null;
-    //   if (item.categories && item.categories.length > 0) {
-    //     const productImages = item.categories[0].product_images;
-
-    //     const imagesArray =
-    //       typeof productImages === "string"
-    //         ? JSON.parse(productImages)
-    //         : productImages;
-
-    //     firstImage =
-    //       imagesArray && imagesArray.length > 0 ? imagesArray[0] : null;
-    //   }
-    //   return {
-    //     id: item.id,
-    //     name: item.name,
-    //     category_image: firstImage,
-    //     is_active: item.is_active,
-    //     price_range: item.price_range,
-    //     discount_percentage: item.discount_percentage,
-    //     total_margin: item.total_margin,
-    //     addon_percentage: item.addon_percentage,
-    //     is_retailor_price_active: item.is_retailor_price_active,
-    //     createdAt: item.createdAt,
-    //     updatedAt: item.updatedAt,
-    //   };
-    // });
 
     const finalResponse = categoryShop
       .filter((cat) => {
-        // Pehle hi check kar lo, agar "Onezies" hai toh list se bahar nikaal do
         const item = cat.toJSON();
         return item.name !== "Onezies";
       })
@@ -1074,7 +1130,7 @@ const homeData = async (req,res,next) => {
         const item = cat.toJSON();
         let firstImage = null;
 
-        if(item.categories && item.categories.length > 0) {
+        if (item.categories && item.categories.length > 0) {
           const productImages = item.categories[0].product_images;
 
           const imagesArray =
@@ -1101,45 +1157,53 @@ const homeData = async (req,res,next) => {
         };
       });
 
-    if(finalResponse.length > 0) {
-      for(let i = finalResponse.length - 1; i > 0; i--) {
+    if (finalResponse.length > 0) {
+      for (let i = finalResponse.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [finalResponse[i],finalResponse[j]] = [
+        [finalResponse[i], finalResponse[j]] = [
           finalResponse[j],
           finalResponse[i],
         ];
       }
     }
 
-    // if (!finalResponse || finalResponse.length === 0) {
-    //   throw new CoustomError("Category not found", 404);
-    // }
-
     const allBanners = bannersData.map((banner) => {
       const bannerJson = banner.toJSON();
-      if(bannerJson.banner_url) {
+      if (bannerJson.banner_url) {
         bannerJson.banner_url = `${process.env.BACKEND_URL}/banners/${bannerJson.banner_url}`;
       }
       return bannerJson;
     });
-    sendResponse(res,"data fetched",200,{
+
+    const allTryOn = result.map((tryOn) => {
+      const tryOnJson = tryOn.toJSON();
+      if (tryOnJson.try_on_avtar) {
+        tryOnJson.try_on_avtar = `${process.env.BACKEND_URL}/baby-try-on-image/${tryOnJson.try_on_avtar}`;
+      }
+      return {
+        id: tryOnJson.id,
+        try_on_avtar: tryOnJson.try_on_avtar,
+      };
+    });
+
+    sendResponse(res, "data fetched", 200, {
       userDetails,
+      tryOn: allTryOn,
       formattedBabyData,
       allBanners,
       categoryShop: finalResponse,
-      tryOn: [],
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const allWishlistData = async (req,res,next) => {
+const allWishlistData = async (req, res, next) => {
   try {
     const { id } = req.user;
-    const { page,size } = req.query;
+    const { page, size } = req.query;
 
-    const { limit,offset } = getPagination(page,size);
+    const { limit, offset } = getPagination(page, size);
     const wishlistEntries = await Wishlist.findAndCountAll({
       where: {
         user_id: id,
@@ -1147,17 +1211,17 @@ const allWishlistData = async (req,res,next) => {
       },
       limit,
       offset,
-      attributes: ["product_id","createdAt"],
-      order: [["createdAt","DESC"]],
+      attributes: ["product_id", "createdAt"],
+      order: [["createdAt", "DESC"]],
       raw: true,
     });
 
-    if(wishlistEntries.rows.length === 0) {
+    if (wishlistEntries.rows.length === 0) {
       return sendResponse(
         res,
         "Wishlist is empty",
         200,
-        getPagingData(wishlistEntries,page,limit),
+        getPagingData(wishlistEntries, page, limit),
       );
     }
 
@@ -1171,38 +1235,24 @@ const allWishlistData = async (req,res,next) => {
       }),
     );
 
-    // const securedProducts = productsWithPrices.map((product) => ({
-    //   ...product,
-    //   product_images: ensureHttps(product.product_images),
-    // }));
-
-    const formattedRows = wishlistEntries.rows.map((item,index) => {
+    const formattedRows = wishlistEntries.rows.map((item, index) => {
       return {
         wishlist_added_at: item.createdAt,
         ...productsWithPrices[index],
       };
     });
-
-    // const finalData = {
-    //   count: wishlistEntries.count,
-    //   rows: formattedRows,
-    // };
-
-    // const formattedResponse = getPagingData(finalData, page, limit);
-
-    // console.log("formattedResponse", formattedResponse);
     sendResponse(
       res,
       "Wishlist fetched successfully with updated prices",
       200,
       { items: formattedRows },
     );
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const addToWishlist = async (req,res,next) => {
+const addToWishlist = async (req, res, next) => {
   try {
     const { id } = req.user;
     const { product_id } = req.body;
@@ -1211,7 +1261,7 @@ const addToWishlist = async (req,res,next) => {
         id: product_id,
       },
     });
-    if(!product) throw new CoustomError("Product not found",404);
+    if (!product) throw new CoustomError("Product not found", 404);
 
     const isInWishlist = await Wishlist.findOne({
       where: {
@@ -1219,7 +1269,7 @@ const addToWishlist = async (req,res,next) => {
         product_id: product_id,
       },
     });
-    if(isInWishlist) {
+    if (isInWishlist) {
       await isInWishlist.destroy();
     } else {
       await Wishlist.create({
@@ -1232,12 +1282,12 @@ const addToWishlist = async (req,res,next) => {
       `${isInWishlist ? "Deleted from" : "Added to"} wishlist`,
       200,
     );
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const deleteFromWishlist = async (req,res,next) => {
+const deleteFromWishlist = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const { id } = req.body;
@@ -1247,18 +1297,18 @@ const deleteFromWishlist = async (req,res,next) => {
         id: id,
       },
     });
-    if(!isInWishlist)
-      throw new CoustomError("There is no data in wishlist",404);
+    if (!isInWishlist)
+      throw new CoustomError("There is no data in wishlist", 404);
 
     await isInWishlist.destroy();
 
-    sendResponse(res,"The product is removed from wishlist",200);
-  } catch(error) {
+    sendResponse(res, "The product is removed from wishlist", 200);
+  } catch (error) {
     next(error);
   }
 };
 
-const babyCategoryData = async (req,res,next) => {
+const babyCategoryData = async (req, res, next) => {
   try {
     const categoryShop = await Category.findAll({
       where: {
@@ -1270,7 +1320,7 @@ const babyCategoryData = async (req,res,next) => {
           as: "categories",
           attributes: ["product_images"],
           limit: 1,
-          order: [["id","ASC"]],
+          order: [["id", "ASC"]],
         },
       ],
     });
@@ -1278,7 +1328,7 @@ const babyCategoryData = async (req,res,next) => {
     const finalResponse = categoryShop.map((cat) => {
       const item = cat.toJSON();
       let firstImage = null;
-      if(item.categories && item.categories.length > 0) {
+      if (item.categories && item.categories.length > 0) {
         const productImages = item.categories[0].product_images;
         const imagesArray =
           typeof productImages === "string"
@@ -1303,25 +1353,25 @@ const babyCategoryData = async (req,res,next) => {
       };
     });
 
-    if(finalResponse.length > 0) {
-      for(let i = finalResponse.length - 1; i > 0; i--) {
+    if (finalResponse.length > 0) {
+      for (let i = finalResponse.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [finalResponse[i],finalResponse[j]] = [
+        [finalResponse[i], finalResponse[j]] = [
           finalResponse[j],
           finalResponse[i],
         ];
       }
     }
 
-    if(!finalResponse || finalResponse.length === 0) {
-      throw new CoustomError("Category not found",404);
+    if (!finalResponse || finalResponse.length === 0) {
+      throw new CoustomError("Category not found", 404);
     }
 
-    sendResponse(res,"Baby category data fetched successfully",200,{
+    sendResponse(res, "Baby category data fetched successfully", 200, {
       categories: finalResponse,
       count: finalResponse.length,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
@@ -1488,7 +1538,7 @@ const babyCategoryData = async (req,res,next) => {
 //   }
 // };
 
-const productCategoryWiseData = async (req,res,next) => {
+const productCategoryWiseData = async (req, res, next) => {
   try {
     const { category_id } = req.body;
     const user_id = req.user.id;
@@ -1500,8 +1550,8 @@ const productCategoryWiseData = async (req,res,next) => {
       },
     });
 
-    if(!categoryData) {
-      throw new CoustomError("Category not found",404);
+    if (!categoryData) {
+      throw new CoustomError("Category not found", 404);
     }
 
     const products = await getCalculatedProductsWithSuffling({
@@ -1519,21 +1569,21 @@ const productCategoryWiseData = async (req,res,next) => {
       }
     })
 
-    const updatedData = await sortProductsByBabyPreference(products,babyId.selected_baby)
-    console.log("updatedData.length",updatedData.length)
-    sendResponse(res,"Products fetched successfully",200,{
+    const updatedData = await sortProductsByBabyPreference(products, babyId.selected_baby)
+    console.log("updatedData.length", updatedData.length)
+    sendResponse(res, "Products fetched successfully", 200, {
       count: updatedData.length,
       products: updatedData,
 
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const productCategoryWiseDataPagination = async (req,res,next) => {
+const productCategoryWiseDataPagination = async (req, res, next) => {
   try {
-    const { category_id,page,limit } = req.body;
+    const { category_id, page, limit } = req.body;
     const user_id = req.user.id;
 
     const products = await getCalculatedProductsWithSuffling({
@@ -1545,22 +1595,22 @@ const productCategoryWiseDataPagination = async (req,res,next) => {
     //   user_id: user_id,
     // });
 
-    const result = paginateArray(products,page,limit,products);
+    const result = paginateArray(products, page, limit, products);
 
-    console.log("result.paginatedItems",result.paginatedItems.length);
+    console.log("result.paginatedItems", result.paginatedItems.length);
 
-    sendResponse(res,"Products fetched successfully",200,{
+    sendResponse(res, "Products fetched successfully", 200, {
       count: result.paginatedItems.length,
       products: result.paginatedItems,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const fetchProductDetails = async (req,res,next) => {
+const fetchProductDetails = async (req, res, next) => {
   try {
-    const { id,is_search } = req.body;
+    const { id, is_search } = req.body;
     const user_id = req.user.id;
     const is_admin = req.user.is_admin;
     const userData = await User.findOne({
@@ -1576,13 +1626,13 @@ const fetchProductDetails = async (req,res,next) => {
     const babies = await processBabyData(babyProfile);
     const targetProduct = await Product.findByPk(id);
 
-    if(is_search == 1) {
+    if (is_search == 1) {
       const existingSearch = await recentSearch.findOne({
-        where: { product_id: id,user_id }
+        where: { product_id: id, user_id }
       });
 
-      if(existingSearch) {
-        await existingSearch.changed('updatedAt',true);
+      if (existingSearch) {
+        await existingSearch.changed('updatedAt', true);
         await existingSearch.save();
       } else {
         await recentSearch.create({
@@ -1592,7 +1642,7 @@ const fetchProductDetails = async (req,res,next) => {
       }
     }
 
-    if(!targetProduct) {
+    if (!targetProduct) {
       return { message: "Product not found" };
     }
 
@@ -1610,39 +1660,37 @@ const fetchProductDetails = async (req,res,next) => {
       product_id: allIds,
       user_id: user_id,
       requestedId: id,
+      selected_baby: userData.selected_baby
     });
 
-
-
     const selectedBabyId = userData ? userData.selected_baby : null;
-
     let babyInfo =
       is_admin == 1
         ? babies
         : babies.map((b) => ({
-          baby_profile_image: b.baby_profile_image,id: b.id,selected: String(b.id) === String(selectedBabyId)
+          baby_profile_image: b.baby_profile_image, id: b.id, selected: String(b.id) === String(selectedBabyId)
             ? true
             : false,
         }));
 
-    if(selectedBabyId) {
+    if (selectedBabyId) {
       const selectedBaby = babyInfo.find(b => b.id === selectedBabyId);
-      if(selectedBaby) {
+      if (selectedBaby) {
         const otherBabies = babyInfo.filter(b => b.id !== selectedBabyId);
-        babyInfo = [selectedBaby,...otherBabies];
+        babyInfo = [selectedBaby, ...otherBabies];
       }
     }
 
-    sendResponse(res,"Product detail fetched successfully",200,{
+    sendResponse(res, "Product detail fetched successfully", 200, {
       productDetails: productDetails,
       babies: babyInfo,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const fetchBabyProfileData = async (req,res,next) => {
+const fetchBabyProfileData = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const { id } = req.body;
@@ -1652,20 +1700,19 @@ const fetchBabyProfileData = async (req,res,next) => {
         user_id,
       },
     });
-    if(!isBabyProfile)
-      throw new CoustomError("Your baby details not found",404);
+    if (!isBabyProfile)
+      throw new CoustomError("Your baby details not found", 404);
 
-    if(isBabyProfile.baby_profile_image) {
+    if (isBabyProfile.baby_profile_image) {
       isBabyProfile.baby_profile_image = `${process.env.BACKEND_URL}/baby-image/${isBabyProfile.baby_profile_image}`;
     }
-
-    sendResponse(res,"Baby detail fetched successfully",200,isBabyProfile);
-  } catch(error) {
+    sendResponse(res, "Baby detail fetched successfully", 200, isBabyProfile);
+  } catch (error) {
     next(error);
   }
 };
 
-const deleteBabyProfile = async (req,res,next) => {
+const deleteBabyProfile = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const { id } = req.body;
@@ -1675,12 +1722,12 @@ const deleteBabyProfile = async (req,res,next) => {
         id,
       },
     });
-    if(!isBabyProfile)
-      throw new CoustomError("You don't have baby profile",404);
+    if (!isBabyProfile)
+      throw new CoustomError("You don't have baby profile", 404);
 
     const user = await User.findByPk(user_id);
 
-    if(isBabyProfile.baby_profile_image) {
+    if (isBabyProfile.baby_profile_image) {
       const imagePath = path.join(
         __dirname,
         "../../../files/BabyProfileImage",
@@ -1690,15 +1737,13 @@ const deleteBabyProfile = async (req,res,next) => {
         .unlink(imagePath)
         .catch(() => console.log("File not found, skipping unlink"));
     }
-
     await isBabyProfile.destroy();
 
-    if(user.selected_baby === id) {
+    if (user.selected_baby === id) {
       const nextBaby = await BabyProfile.findOne({
         where: { user_id },
         attributes: ['id']
       });
-      
       await user.update({
         selected_baby: nextBaby ? nextBaby.id : 0
       });
@@ -1707,7 +1752,7 @@ const deleteBabyProfile = async (req,res,next) => {
     const remainingCount = await BabyProfile.count({
       where: { user_id },
     });
-    if(remainingCount === 0) {
+    if (remainingCount === 0) {
       await User.update(
         {
           is_profile_complete: 0,
@@ -1717,13 +1762,13 @@ const deleteBabyProfile = async (req,res,next) => {
         { where: { id: user_id } },
       );
     }
-    sendResponse(res,"Your baby profile deleted successfully",200);
-  } catch(error) {
+    sendResponse(res, "Your baby profile deleted successfully", 200);
+  } catch (error) {
     next(error);
   }
 };
 
-const deleteMyProfile = async (req,res,next) => {
+const deleteMyProfile = async (req, res, next) => {
   try {
     const { id } = req.user;
     const user = await User.findOne({
@@ -1732,7 +1777,7 @@ const deleteMyProfile = async (req,res,next) => {
         is_delete: 0,
       },
     });
-    if(!user) throw new CoustomError("User not found",404);
+    if (!user) throw new CoustomError("User not found", 404);
     await user.update({
       is_delete: 1,
     });
@@ -1741,9 +1786,9 @@ const deleteMyProfile = async (req,res,next) => {
       where: { user_id: id },
     });
 
-    if(babyProfiles.length > 0) {
-      for(const profile of babyProfiles) {
-        if(profile.baby_profile_image) {
+    if (babyProfiles.length > 0) {
+      for (const profile of babyProfiles) {
+        if (profile.baby_profile_image) {
           const imagePath = path.join(
             __dirname,
             "../../../files/BabyProfiles",
@@ -1765,13 +1810,13 @@ const deleteMyProfile = async (req,res,next) => {
       });
       console.log(`${deletedCount} baby profiles and their images deleted.`);
     }
-    sendResponse(res,"Your profile has been deleted successfully",200);
-  } catch(error) {
+    sendResponse(res, "Your profile has been deleted successfully", 200);
+  } catch (error) {
     next(error);
   }
 };
 
-const addNewUserAddress = async (req,res,next) => {
+const addNewUserAddress = async (req, res, next) => {
   try {
     const { id } = req.user;
     const {
@@ -1793,7 +1838,7 @@ const addNewUserAddress = async (req,res,next) => {
       },
     });
     let is_default = 0;
-    if(isAnyAddress.length === 0) {
+    if (isAnyAddress.length === 0) {
       is_default = 1;
     } else {
       is_default = 0;
@@ -1814,13 +1859,13 @@ const addNewUserAddress = async (req,res,next) => {
       state_id,
     });
 
-    sendResponse(res,"Address added successfully",200);
-  } catch(error) {
+    sendResponse(res, "Address added successfully", 200);
+  } catch (error) {
     next(error);
   }
 };
 
-const allSavedAddress = async (req,res,next) => {
+const allSavedAddress = async (req, res, next) => {
   try {
     const { id } = req.user;
     const allAddress = await Address.findAll({
@@ -1829,16 +1874,16 @@ const allSavedAddress = async (req,res,next) => {
       },
     });
 
-    sendResponse(res,"Address list here",200,{ address: allAddress });
-  } catch(error) {
+    sendResponse(res, "Address list here", 200, { address: allAddress });
+  } catch (error) {
     next(error);
   }
 };
 
-const updateUserAddress = async (req,res,next) => {
+const updateUserAddress = async (req, res, next) => {
   try {
     const user_id = req.user.id;
-    console.log("reqBody",req.body);
+    console.log("reqBody", req.body);
     const {
       id,
       address_type,
@@ -1860,7 +1905,7 @@ const updateUserAddress = async (req,res,next) => {
       },
     });
 
-    if(!isAddress) throw new CoustomError("No Address found",404);
+    if (!isAddress) throw new CoustomError("No Address found", 404);
 
     await isAddress.update({
       address_type: address_type ? address_type : isAddress.address_type,
@@ -1877,13 +1922,13 @@ const updateUserAddress = async (req,res,next) => {
       country_id: country_id ? country_id : isAddress.country_id,
     });
 
-    sendResponse(res,"Your address has been updated",200,isAddress);
-  } catch(error) {
+    sendResponse(res, "Your address has been updated", 200, isAddress);
+  } catch (error) {
     next(error);
   }
 };
 
-const addressDetails = async (req,res,next) => {
+const addressDetails = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const { id } = req.body;
@@ -1893,44 +1938,44 @@ const addressDetails = async (req,res,next) => {
         user_id,
       },
     });
-    if(!isAddress) throw new CoustomError("No address found",404);
-    sendResponse(res,"Geting address details",200,isAddress);
-  } catch(error) {
+    if (!isAddress) throw new CoustomError("No address found", 404);
+    sendResponse(res, "Geting address details", 200, isAddress);
+  } catch (error) {
     next(error);
   }
 };
 
-const deleteAddress = async (req,res,next) => {
+const deleteAddress = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const { id } = req.body;
     const addressToDelete = await Address.findOne({
-      where: { id,user_id },
+      where: { id, user_id },
     });
-    console.log("addressToDelete",addressToDelete);
-    if(!addressToDelete) {
-      throw new CoustomError("Address not found",404);
+    console.log("addressToDelete", addressToDelete);
+    if (!addressToDelete) {
+      throw new CoustomError("Address not found", 404);
     }
     const wasDefault = addressToDelete.is_default === 1;
     await addressToDelete.destroy();
-    if(wasDefault) {
+    if (wasDefault) {
       const nextAddress = await Address.findOne({
         where: { user_id },
-        order: [["createdAt","DESC"]],
+        order: [["createdAt", "DESC"]],
       });
 
-      if(nextAddress) {
+      if (nextAddress) {
         await nextAddress.update({ is_default: 1 });
       }
     }
 
-    sendResponse(res,"Your address has beed deleted",200,addressToDelete);
-  } catch(error) {
+    sendResponse(res, "Your address has beed deleted", 200, addressToDelete);
+  } catch (error) {
     next(error);
   }
 };
 
-const setAsIsDefault = async (req,res,next) => {
+const setAsIsDefault = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const { id } = req.body;
@@ -1951,29 +1996,29 @@ const setAsIsDefault = async (req,res,next) => {
       },
     );
 
-    if(updatedAddress[0] === 0) {
-      throw new CoustomError("Address not found",404);
+    if (updatedAddress[0] === 0) {
+      throw new CoustomError("Address not found", 404);
     }
 
-    sendResponse(res,"Address set as default successfully!",200);
-  } catch(error) {
+    sendResponse(res, "Address set as default successfully!", 200);
+  } catch (error) {
     next(error);
   }
 };
 
-const addToCart = async (req,res,next) => {
+const addToCart = async (req, res, next) => {
   try {
     const user_id = req.user.id;
-    const { id,quantity } = req.body;
+    const { id, quantity } = req.body;
     const productData = await Product.findOne({
       where: {
         id,
       },
     });
-    if(!productData) throw new CoustomError("Product not found",404);
+    if (!productData) throw new CoustomError("Product not found", 404);
 
     const existingCartItem = await Cart.findOne({
-      where: { user_id,product_id: id },
+      where: { user_id, product_id: id },
     });
 
     const productDetails = await getCalculatedProducts({
@@ -1981,17 +2026,17 @@ const addToCart = async (req,res,next) => {
       user_id: user_id,
     });
 
-    if(existingCartItem) {
+    if (existingCartItem) {
       const updatedQuantity = existingCartItem.quantity + quantity;
-      if(updatedQuantity > 10) {
+      if (updatedQuantity > 10) {
         throw new CoustomError(
           "You cannot add more than 10 units of this product",
           400,
         );
       }
-      if(updatedQuantity <= 0) {
+      if (updatedQuantity <= 0) {
         await existingCartItem.destroy();
-        return sendResponse(res,"Product removed from cart successfully",200);
+        return sendResponse(res, "Product removed from cart successfully", 200);
       }
 
       existingCartItem.quantity = updatedQuantity;
@@ -2013,10 +2058,10 @@ const addToCart = async (req,res,next) => {
         resData,
       );
     } else {
-      if(quantity <= 0) {
-        throw new CoustomError("Invalid quantity for new item",400);
+      if (quantity <= 0) {
+        throw new CoustomError("Invalid quantity for new item", 400);
       }
-      if(quantity > 10) {
+      if (quantity > 10) {
         throw new CoustomError(
           "You cannot add more than 10 units of this product",
           400,
@@ -2043,32 +2088,32 @@ const addToCart = async (req,res,next) => {
         resData,
       );
     }
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const updatedQuantityInCart = async (req,res,next) => {
+const updatedQuantityInCart = async (req, res, next) => {
   try {
     const user_id = req.user.id;
-    const { id,quantity } = req.body;
+    const { id, quantity } = req.body;
 
-    if(quantity < 1 || quantity > 10) {
-      throw new CoustomError("Quantity must be between 1 and 10",400);
+    if (quantity < 1 || quantity > 10) {
+      throw new CoustomError("Quantity must be between 1 and 10", 400);
     }
 
     const cartItem = await Cart.findOne({
-      where: { user_id,id },
+      where: { user_id, id },
     });
-    if(!cartItem) throw new CoustomError("Cart item not found",404);
+    if (!cartItem) throw new CoustomError("Cart item not found", 404);
 
     const productDetails = await getCalculatedProducts({
       product_id: cartItem.product_id,
       user_id: user_id,
     });
 
-    if(!productDetails)
-      throw new CoustomError("Product details not found",404);
+    if (!productDetails)
+      throw new CoustomError("Product details not found", 404);
 
     cartItem.quantity = quantity;
     const salePrice = parseFloat(productDetails.sale_price) || 0;
@@ -2078,26 +2123,26 @@ const updatedQuantityInCart = async (req,res,next) => {
     await cartItem.save();
     const plainCartItem = cartItem.get({ plain: true });
 
-    return sendResponse(res,"Cart item quantity updated successfully",200,{
+    return sendResponse(res, "Cart item quantity updated successfully", 200, {
       ...plainCartItem,
       max_quantity: 10,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const removeFromCart = async (req,res,next) => {
+const removeFromCart = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const { id } = req.body;
     const cartItem = await Cart.findOne({
-      where: { user_id,id },
+      where: { user_id, id },
     });
-    if(!cartItem) throw new CoustomError("Cart item not found",404);
+    if (!cartItem) throw new CoustomError("Cart item not found", 404);
     await cartItem.destroy();
-    return sendResponse(res,"Product removed from cart successfully",200);
-  } catch(error) {
+    return sendResponse(res, "Product removed from cart successfully", 200);
+  } catch (error) {
     next(error);
   }
 };
@@ -2129,25 +2174,25 @@ const removeFromCart = async (req,res,next) => {
 //   }
 // };
 
-const fetchAllCartItems = async (req,res,next) => {
+const fetchAllCartItems = async (req, res, next) => {
   try {
-    const { id: user_id } = req.user;
 
-    const [cartItems,savedAddress] = await Promise.all([
+    const { id: user_id } = req.user;
+    const [cartItems, savedAddress] = await Promise.all([
       Cart.findAll({
         where: { user_id },
         attributes: {
-          exclude: ["createdAt","updatedAt","user_id","category_name"],
+          exclude: ["createdAt", "updatedAt", "user_id", "category_name"],
         },
         raw: true,
       }),
       Address.findOne({
-        where: { user_id,is_default: 1 },
+        where: { user_id, is_default: 1 },
       }),
     ]);
 
-    if(!cartItems || cartItems.length === 0) {
-      return sendResponse(res,"Cart is empty",200,{
+    if (!cartItems || cartItems.length === 0) {
+      return sendResponse(res, "Cart is empty", 200, {
         saved_address: savedAddress,
         cart_item: [],
         related_outfits: [],
@@ -2162,7 +2207,7 @@ const fetchAllCartItems = async (req,res,next) => {
     const detailsArray = Array.isArray(productDetailsList)
       ? productDetailsList
       : [productDetailsList];
-    const productMap = new Map(detailsArray.map((p) => [p.id.toString(),p]));
+    const productMap = new Map(detailsArray.map((p) => [p.id.toString(), p]));
 
     const categoryIds = [
       ...new Set(detailsArray.map((p) => p.category_id).filter((id) => id)),
@@ -2170,7 +2215,7 @@ const fetchAllCartItems = async (req,res,next) => {
 
     let relatedOutfits = [];
 
-    if(categoryIds.length > 0) {
+    if (categoryIds.length > 0) {
       // const rawRelated = await getCalculatedProducts({
       //   user_id,
       //   category_id: categoryIds,
@@ -2204,26 +2249,26 @@ const fetchAllCartItems = async (req,res,next) => {
       };
     });
 
-    sendResponse(res,"Cart items fetched successfully",200,{
+    sendResponse(res, "Cart items fetched successfully", 200, {
       saved_address: savedAddress,
       cart_item: cartItemsWithDetails,
       related_outfits: relatedOutfits,
     });
-  } catch(error) {
-    console.error("Error in fetchAllCartItems:",error);
+  } catch (error) {
+    console.error("Error in fetchAllCartItems:", error);
     next(error);
   }
 };
 
-const fetchAllOrderedItems = async (req,res,next) => {
+const fetchAllOrderedItems = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const orders = await Order.findAll({
       // where: { user_id: user_id, order_status: "Placed", is_returned: 0 },
-      where: { user_id: user_id,order_status: "Placed" },
+      where: { user_id: user_id, order_status: "Placed" },
       limit: 10,
-      order: [["order_date","DESC"]],
-      exclude: ["createdAt","updatedAt","user_id","order_date"],
+      order: [["order_date", "DESC"]],
+      exclude: ["createdAt", "updatedAt", "user_id", "order_date"],
       raw: true,
     });
     // console.log("orders", orders);
@@ -2244,7 +2289,7 @@ const fetchAllOrderedItems = async (req,res,next) => {
     });
 
     productsDetails.forEach((p) => {
-      if(p.category_id) categories.push(p.category_id);
+      if (p.category_id) categories.push(p.category_id);
     });
     const uniqueCategories = [...new Set(categories)];
 
@@ -2276,18 +2321,18 @@ const fetchAllOrderedItems = async (req,res,next) => {
 
     let formattedSuggestions = [];
 
-    if(productIds.length > 0) {
+    if (productIds.length > 0) {
       formattedSuggestions = await getCalculatedProductsWithSuffling({
         user_id,
         product_id: productIds,
       });
     }
 
-    if(formattedSuggestions && !Array.isArray(formattedSuggestions)) {
+    if (formattedSuggestions && !Array.isArray(formattedSuggestions)) {
       formattedSuggestions = [formattedSuggestions];
     }
 
-    console.log("formattedSuggestions",formattedSuggestions);
+    // console.log("formattedSuggestions",formattedSuggestions);
 
     const formattedResponse = orders.map((order) => {
       const items =
@@ -2305,10 +2350,10 @@ const fetchAllOrderedItems = async (req,res,next) => {
           typeof detail.product_images === "string"
             ? JSON.parse(detail.product_images || "[]")
             : detail.product_images || [];
-      } catch(e) {
+      } catch (e) {
         formattedImages = [];
       }
-      console.log("formattedImages",formattedImages);
+      console.log("formattedImages", formattedImages);
       return {
         order_id: Number(order.id),
         total_amount: `${order.total_amount}`,
@@ -2317,24 +2362,24 @@ const fetchAllOrderedItems = async (req,res,next) => {
         product_id: Number(items[0].product_id),
       };
     });
-    sendResponse(res,"Ordered items fetched successfully",200,{
+    sendResponse(res, "Ordered items fetched successfully", 200, {
       orders: formattedResponse,
       suggestedOutfits: formattedSuggestions,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const allFilterData = async (req,res,next) => {
+const allFilterData = async (req, res, next) => {
   try {
     // const [brands, colorsData, genders, sizes, febrics] = await Promise.all([
-    const [colorsData,genders,sizes,febrics] = await Promise.all([
+    const [colorsData, genders, sizes, febrics] = await Promise.all([
       // Brand.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
-      Color.findAll({ attributes: { exclude: ["createdAt","updatedAt"] } }),
-      Gender.findAll({ attributes: { exclude: ["createdAt","updatedAt"] } }),
-      Size.findAll({ attributes: { exclude: ["createdAt","updatedAt"] } }),
-      Fabric.findAll({ attributes: { exclude: ["createdAt","updatedAt"] } }),
+      Color.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
+      Gender.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
+      Size.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
+      Fabric.findAll({ attributes: { exclude: ["createdAt", "updatedAt"] } }),
     ]);
 
     let uniqueColors = new Set();
@@ -2347,7 +2392,7 @@ const allFilterData = async (req,res,next) => {
 
       splitNames.forEach((name) => {
         const trimmedName = name.trim();
-        if(
+        if (
           !uniqueColors.has(trimmedName.toLowerCase()) &&
           isNaN(trimmedName)
         ) {
@@ -2361,10 +2406,10 @@ const allFilterData = async (req,res,next) => {
     });
 
     const priceOptions = [
-      { id: 1,label: "$0 - $99",min_price: 0,max_price: 99 },
-      { id: 2,label: "$100 - $199",min_price: 100,max_price: 199 },
-      { id: 3,label: "$200 - $299",min_price: 200,max_price: 299 },
-      { id: 4,label: "$300 and above",min_price: 300,max_price: null },
+      { id: 1, label: "$0 - $99", min_price: 0, max_price: 99 },
+      { id: 2, label: "$100 - $199", min_price: 100, max_price: 199 },
+      { id: 3, label: "$200 - $299", min_price: 200, max_price: 299 },
+      { id: 4, label: "$300 and above", min_price: 300, max_price: null },
     ];
     const filters = [
       {
@@ -2398,24 +2443,25 @@ const allFilterData = async (req,res,next) => {
         options: febrics,
       },
     ];
-    sendResponse(res,"Filters fetched successfully",200,{ filters });
-  } catch(error) {
-    console.error("Filter Fetch Error:",error);
+    sendResponse(res, "Filters fetched successfully", 200, { filters });
+  } catch (error) {
+    console.error("Filter Fetch Error:", error);
     next(error);
   }
 };
 
-const applayFilters = async (req,res,next) => {
+const applayFilters = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     // const { price, brand, gender, color, size, fabric, category_id } = req.body;
-    const { price,gender,color,size,fabric,category_id } = req.body;
+    const { price, gender, color, size, fabric, category_id } = req.body;
     let productWhere = { sale_price: { [Op.gt]: 0 } };
-    if(category_id) productWhere.category_id = category_id;
+    if (category_id) productWhere.category_id = category_id;
     // if (brand?.length) productWhere.brand_id = { [Op.in]: brand };
-    if(gender?.length) productWhere.gender_id = { [Op.in]: gender };
-    if(color?.length) productWhere.color_id = { [Op.in]: color };
-    if(size?.length) productWhere.size_id = { [Op.in]: size };
+    if (gender?.length) productWhere.gender_id = { [Op.in]: gender };
+    if (color?.length) productWhere.color_id = { [Op.in]: color };
+    if (size?.length) productWhere.size_id = { [Op.in]: size };
+    if (fabric?.length) productWhere.fabric_id = { [Op.in]: fabric };
 
     let products = await getCalculatedProductsWithSuffling({
       category_id,
@@ -2423,61 +2469,61 @@ const applayFilters = async (req,res,next) => {
       productWhereData: productWhere,
     });
 
-    if(price) {
+    if (price) {
       const min = parseFloat(price.min_price) || 0;
       const max =
         price.max_price !== null ? parseFloat(price.max_price) : Infinity;
 
       let filteredResults = [];
-      for(let i = 0; i < products.length; i++) {
+      for (let i = 0; i < products.length; i++) {
         const sPrice = parseFloat(products[i].sale_price);
-        if(sPrice >= min && sPrice <= max) {
+        if (sPrice >= min && sPrice <= max) {
           filteredResults.push(products[i]);
         }
       }
       products = filteredResults;
     }
 
-    return sendResponse(res,"Filters applied successfully",200,{
+    return sendResponse(res, "Filters applied successfully", 200, {
       count: products.length,
       products,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const searchProduct = async (req,res,next) => {
+const searchProduct = async (req, res, next) => {
   try {
     const user_id = req.user.id
     const searchItem = req.body.search_text;
 
     let productWhere = { sale_price: { [Op.gt]: 0 } };
-    if(searchItem) productWhere.product_name = { [Op.like]: `%${searchItem}%` };
+    if (searchItem) productWhere.product_name = { [Op.like]: `%${searchItem}%` };
 
     let products = await getCalculatedProductsWithSuffling({
       user_id,
       productWhereData: productWhere,
     });
     const finalProducts = Array.isArray(products) ? products : [products];
-    return sendResponse(res,"Searched applied successfully",200,{
+    return sendResponse(res, "Searched applied successfully", 200, {
       count: finalProducts.length,
       products: finalProducts,
     });
-  } catch(error) {
+  } catch (error) {
     next(error)
   }
 }
 
-const getAllRecentlySearchedData = async (req,res,next) => {
+const getAllRecentlySearchedData = async (req, res, next) => {
   try {
-    const user_id = req.user.id
 
+    const user_id = req.user.id
     const count = await recentSearch.count({ where: { user_id } });
-    if(count > 5) {
+    if (count > 5) {
       const latestFive = await recentSearch.findAll({
         where: { user_id },
-        order: [['updatedAt','DESC']],
+        order: [['updatedAt', 'DESC']],
         limit: 5,
         attributes: ['id']
       });
@@ -2490,6 +2536,7 @@ const getAllRecentlySearchedData = async (req,res,next) => {
         }
       });
     }
+
     const recentlySearchData = await recentSearch.findAll({
       where: {
         user_id
@@ -2501,7 +2548,7 @@ const getAllRecentlySearchedData = async (req,res,next) => {
           attributes: ['id']
         }
       ],
-      order: [['updatedAt','DESC']],
+      order: [['updatedAt', 'DESC']],
     })
 
     const finalProductIds = recentlySearchData.map(item => item.product_id);
@@ -2511,7 +2558,6 @@ const getAllRecentlySearchedData = async (req,res,next) => {
       user_id,
       product_id: finalProductIds,
     });
-
 
     const productArray = Array.isArray(products)
       ? products
@@ -2527,17 +2573,39 @@ const getAllRecentlySearchedData = async (req,res,next) => {
       product_images: product.product_images
     }));
 
-    return sendResponse(res,"Recently searched data fetched successfully",200,{
-      count: formattedProducts.length,
-      products: formattedProducts,
+    const trendingOutfits = await Product.findAll({
+      attributes: ['id'],
+      where: {
+        is_best_seller: 1,
+        sale_price: {
+          [Op.gt]: 0
+        }
+      },
+      order: [Sequelize.literal('RAND()')],
+      limit: 15,
+      raw: true
     });
 
-  } catch(error) {
+    const trOutfitIdsArray = trendingOutfits.map(item => item.id);
+
+    console.log("findAllTrendingOutfitIds", trOutfitIdsArray)
+    const trendingOutfitCloth = await getCalculatedProductsWithSuffling({
+      user_id,
+      product_id: trOutfitIdsArray
+    })
+
+    return sendResponse(res, "Recently searched data fetched successfully", 200, {
+      count: trendingOutfitCloth.length,
+      recent_search: formattedProducts,
+      products: trendingOutfitCloth,
+    });
+
+  } catch (error) {
     next(error)
   }
 }
 
-const selectBabyProfile = async (req,res,next) => {
+const selectBabyProfile = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const { id } = req.body;
@@ -2547,8 +2615,8 @@ const selectBabyProfile = async (req,res,next) => {
         user_id,
       },
     });
-    if(!babyProfile) {
-      throw new CoustomError("Baby profile not found",404);
+    if (!babyProfile) {
+      throw new CoustomError("Baby profile not found", 404);
     }
 
     const useExist = await User.findOne({
@@ -2557,23 +2625,21 @@ const selectBabyProfile = async (req,res,next) => {
         is_delete: 0,
       },
     });
-    if(useExist) {
+    if (useExist) {
       await useExist.update({
         selected_baby: id,
       });
     }
 
-    sendResponse(res,"Baby profile selected successfully",200,{
-      babyProfile,
-    });
-  } catch(error) {
+    sendResponse(res, "Baby profile selected successfully", 200);
+  } catch (error) {
     next(error);
   }
 };
 
-const helpAndSupport = async (req,res,next) => {
+const helpAndSupport = async (req, res, next) => {
   try {
-    const { name,phone,country_code,email,message,subject } = req.body;
+    const { name, phone, country_code, email, message, subject } = req.body;
 
     const mailOptions = {
       from: process.env.GMAIL_USER,
@@ -2637,13 +2703,13 @@ const helpAndSupport = async (req,res,next) => {
     };
 
     await sendOtpOnEmail(mailOptions);
-    sendResponse(res,"Your query has been submitted successfully",200);
-  } catch(error) {
+    sendResponse(res, "Your query has been submitted successfully", 200);
+  } catch (error) {
     next(error);
   }
 };
 
-const staticPageDetails = async (req,res,next) => {
+const staticPageDetails = async (req, res, next) => {
   try {
     const { id } = req.body;
     const staticPage = await StaticPage.findOne({
@@ -2651,31 +2717,31 @@ const staticPageDetails = async (req,res,next) => {
         id,
         is_active: 1,
       },
-      attributes: ["id","title","content"],
+      attributes: ["id", "title", "content"],
     });
-    console.log("id",id);
-    if(!staticPage) {
-      throw new CoustomError("Page not found",404);
+    console.log("id", id);
+    if (!staticPage) {
+      throw new CoustomError("Page not found", 404);
     }
-    sendResponse(res,"Page details fetched successfully",200,{
+    sendResponse(res, "Page details fetched successfully", 200, {
       staticPage,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const placeOrder = async (req,res,next) => {
+const placeOrder = async (req, res, next) => {
   try {
-    const { id,shipping_address,payment_method } = req.body;
+    const { id, shipping_address, payment_method } = req.body;
     const userId = req.user.id;
 
     const cartItems = await Cart.findAll({
-      where: { id: id,user_id: userId },
+      where: { id: id, user_id: userId },
       include: ["product"],
     });
 
-    if(cartItems.length === 0) throw new CoustomError("Cart is empty",404);
+    if (cartItems.length === 0) throw new CoustomError("Cart is empty", 404);
 
     const productDetailsList = await getCalculatedProducts({
       user_id: userId,
@@ -2704,12 +2770,12 @@ const placeOrder = async (req,res,next) => {
     });
 
     const totalOrderAmount = itemsList.reduce(
-      (sum,item) => sum + item.subtotal,
+      (sum, item) => sum + item.subtotal,
       0,
     );
 
     const totalOrderQty = itemsList.reduce(
-      (sum,item) => sum + item.quantity,
+      (sum, item) => sum + item.quantity,
       0,
     );
 
@@ -2724,26 +2790,26 @@ const placeOrder = async (req,res,next) => {
       order_status: "Placed",
     });
 
-    await Cart.destroy({ where: { id: id,user_id: userId } });
-    return sendResponse(res,"Order Placed Successfully",201,{
+    await Cart.destroy({ where: { id: id, user_id: userId } });
+    return sendResponse(res, "Order Placed Successfully", 201, {
       newOrder,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const createPaymentIntent = async (req,res,next) => {
+const createPaymentIntent = async (req, res, next) => {
   try {
-    const { id,shipping_address } = req.body;
+    const { id, shipping_address } = req.body;
     const userId = req.user.id;
 
     const cartItems = await Cart.findAll({
-      where: { id: id,user_id: userId },
+      where: { id: id, user_id: userId },
       include: ["product"],
     });
 
-    if(cartItems.length === 0) throw new CoustomError("Cart is empty",404);
+    if (cartItems.length === 0) throw new CoustomError("Cart is empty", 404);
 
     const productDetailsList = await getCalculatedProducts({
       user_id: userId,
@@ -2769,10 +2835,10 @@ const createPaymentIntent = async (req,res,next) => {
     });
 
     const totalOrderAmount = itemsList.reduce(
-      (sum,item) => sum + item.subtotal,
+      (sum, item) => sum + item.subtotal,
       0,
     );
-    console.log("Total Order Amount:",Math.round(totalOrderAmount));
+    console.log("Total Order Amount:", Math.round(totalOrderAmount));
     const amountInPaise = Math.round(totalOrderAmount * 100);
 
     const paymentIntent = await stripe.paymentIntents.create({
@@ -2791,22 +2857,22 @@ const createPaymentIntent = async (req,res,next) => {
       clientSecret: paymentIntent.client_secret,
       amount: amountInPaise,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const createCheckoutSession = async (req,res,next) => {
+const createCheckoutSession = async (req, res, next) => {
   try {
-    const { id,shipping_address_id } = req.body;
+    const { id, shipping_address_id } = req.body;
     const userId = req.user.id;
 
     const cartItems = await Cart.findAll({
-      where: { id: id,user_id: userId },
+      where: { id: id, user_id: userId },
       include: ["product"],
     });
-    // console.log("cartItems", cartItems);
-    if(cartItems.length === 0) throw new Error("Cart is empty");
+    console.log("cartItems", cartItems);
+    if (cartItems.length === 0) throw new CoustomError("Cart is empty", 400);
 
     const productDetailsList = await getCalculatedProducts({
       user_id: userId,
@@ -2834,10 +2900,10 @@ const createCheckoutSession = async (req,res,next) => {
     });
 
     const totalOrderQty = itemsList.reduce(
-      (sum,item) => sum + item.quantity,
+      (sum, item) => sum + item.quantity,
       0,
     );
-    const totalAmount = itemsList.reduce((sum,item) => sum + item.subtotal,0);
+    const totalAmount = itemsList.reduce((sum, item) => sum + item.subtotal, 0);
 
     const addressData = await Address.findOne({
       where: {
@@ -2889,240 +2955,279 @@ const createCheckoutSession = async (req,res,next) => {
       },
     });
 
-    sendResponse(res,"Checkout session created successfully",200,{
+    sendResponse(res, "Checkout session created successfully", 200, {
       url: session.url,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const verifyPayment = async (req,res,next) => {
+const verifyPayment = async (req, res, next) => {
   try {
-    const { sessionId } = req.body;
-    console.log("sessionId",sessionId);
-    if(!sessionId) throw new CoustomError("Session ID is required",400);
 
-    const existingTx = await Transaction.findOne({
+    const { sessionId } = req.body;
+    const isTransactionAvilible = await Transaction.findOne({
       where: { stripe_session_id: sessionId },
     });
-    if(existingTx)
-      throw new CoustomError(
-        "This transaction has already been processed.",
-        400,
-      );
-
-    let session;
-    try {
-      session = await stripe.checkout.sessions.retrieve(sessionId,{
-        expand: ["invoice","subscription","payment_intent","customer"],
-      });
-    } catch(err) {
-      console.log("err",err);
-      throw new CoustomError("Invalid Session ID",400);
-    }
-    const { metadata,payment_status,mode,subscription } = session;
-
-    if(metadata && (metadata.action === 'purchase_subscription' || metadata.action === 'upgrade_to_yearly_scheduled')) {
-      const isPaid = payment_status === "paid";
-      if(!isPaid) {
-        throw new CoustomError("Subscription payment failed.",400);
+    if (isTransactionAvilible) {
+      if (isTransactionAvilible.status == 'paid') {
+        sendResponse(res, `Payment has been successfully paid and your ${isTransactionAvilible.type == order ? "order has been placed" : "subscription has been added to your account"}`, 200)
       }
-
-      const userId = metadata.userId;
-      const planId = metadata.planId || metadata.yearlyPlanId;
-      const planDuration = metadata.planDuration;
-
-      const currentActiveSub = await Subscriber.findOne({
-        where: { user_id: userId,status: 'active' }
-      });
-
-      let startDate = new Date();
-      let calculatedStatus = "active";
-      if(currentActiveSub) {
-        startDate = new Date(currentActiveSub.end_date);
-        calculatedStatus = "scheduled";
-      }
-      let endDate = new Date(startDate);
-      if(planDuration === 'year') {
-        endDate.setFullYear(endDate.getFullYear() + 1);
-      } else {
-        endDate.setMonth(endDate.getMonth() + 1);
-      }
-
-      const subscriberRecord = await Subscriber.create({
-        user_id: userId,
-        plan_id: planId,
-        stripe_subscription_id: null,
-        status: calculatedStatus,
-        start_date: startDate,
-        end_date: endDate,
-        stripe_invoice_url: session.invoice?.hosted_invoice_url || null,
-        stripe_invoice_pdf: session.invoice?.invoice_pdf || null,
-        payment_method: session.payment_method_types[0] || "card",
-      });
-
-      const transaction = await Transaction.create({
-        user_id: userId,
-        subscription_id: subscriberRecord.id,
-        stripe_session_id: sessionId,
-        transaction_id: session.payment_intent?.id || session.payment_intent || "n/a",
-        payment_intent_id: session.payment_intent?.id || session.payment_intent || null,
-        invoice_id: session.invoice?.id || null,
-        invoice_url: session.invoice?.hosted_invoice_url || null,
-        amount: session.amount_total / 100,
-        status: "paid",
-        payment_method: session.payment_method_types[0] || "card",
-        subscription_plan_id: planId,
-      });
-
-      await subscriberRecord.update({ transaction_id: transaction.id });
-
-      if(calculatedStatus === "active") {
-        await User.update(
-          {
-            active_plan_id: planId,
-            current_subscription_id: subscriberRecord.id,
-            stripe_subscription_id: null
-          },
-          { where: { id: userId } }
-        );
-
-        return sendResponse(res,"Subscription activated successfully (Manual Loop)",200,{
-          subscriptionId: subscriberRecord.id,
-          status: "active"
-        });
-      } else {
-        return sendResponse(res,"Next subscription plan scheduled in queue successfully",200,{
-          subscriptionId: subscriberRecord.id,
-          status: "scheduled",
-          activationDate: startDate
-        });
+      else {
+        throw new CoustomError("Payment failed please contract admin", 400)
       }
     }
-
-
-    const orderId = session.metadata.order_id;
-    const userId = session.metadata.user_id;
-    // const cartIds = JSON.parse(session.metadata.cart_id);
-    // const metadata = session.metadata;
-
-    let cartIds = null;
-    let isReorder = metadata.is_reorder === "true";
-
-    if(isReorder) {
-      const oldOrderId = metadata.order_id;
-      console.log("Processing Reorder for Order ID:",oldOrderId);
-      cartIds = [];
-    } else {
-      try {
-        cartIds = metadata.cart_id ? JSON.parse(metadata.cart_id) : [];
-      } catch(e) {
-        cartIds = [];
-      }
-    }
-
-    const order = await Order.findByPk(orderId);
-    if(!order) throw new CoustomError("Order not found",404);
-
-    const invoiceUrl = session.invoice
-      ? session.invoice.hosted_invoice_url
-      : null;
-    const invoiceId =
-      session.invoice?.id ||
-      (typeof session.invoice === "string" ? session.invoice : null);
-
-    if(session.payment_status === "paid") {
-      await order.update({
-        order_status: "Placed",
-        payment_method: session.payment_method_types[0],
-      });
-
-      await Transaction.create({
-        user_id: userId,
-        order_id: order.id,
-        stripe_session_id: sessionId,
-        payment_intent_id: session.payment_intent,
-        transaction_id: session.payment_intent,
-        amount: session.amount_total / 100,
-        status: session.payment_status,
-        invoice_id: invoiceId,
-        invoice_url: invoiceUrl,
-        payment_method: session.payment_method_types[0],
-      });
-
-      const userData = await User.findByPk(userId);
-      if(userData) await userData.increment("orders",{ by: 1 });
-
-      if(!isReorder && cartIds.length > 0) {
-        await Cart.destroy({ where: { id: cartIds,user_id: userId } });
-      }
-
-      try {
-        const bambiniResponse = await createOrder(orderId,userData);
-
-        if(bambiniResponse.status) {
-          await order.update({
-            retailer_order_id: bambiniResponse.order_id,
-            retailer_status: "Success",
-          });
-          console.log("Bambini Order Placed:",bambiniResponse.order_id);
-        } else {
-          await order.update({
-            retailer_status: "Failed",
-            retailer_error_log: JSON.stringify(
-              bambiniResponse.errors || bambiniResponse.message,
-            ),
-          });
-
-          console.error(
-            "Bambini Rejected Order but Payment is Done:",
-            bambiniResponse.errors,
-          );
-        }
-      } catch(bambiniErr) {
-        await order.update({
-          retailer_status: "Failed",
-          retailer_error_log: bambiniErr.message,
-        });
-        console.error("Bambini API Error:",bambiniErr);
-      }
-
-      return sendResponse(res,"Order placed successfully",200,{
-        orderId: order.order_id,
-      });
-    } else {
-      await order.update({ order_status: "Failed" });
-      await Transaction.create({
-        user_id: userId,
-        order_id: order.id,
-        stripe_session_id: sessionId,
-        payment_intent_id: session.payment_intent,
-        transaction_id: session.payment_intent,
-        amount: session.amount_total / 100,
-        // status: session.payment_status,
-        status: "failed",
-        invoice_url: null,
-        invoice_id: invoiceId,
-        payment_method: session.payment_method_types[0] || "n/a",
-      });
-
-      return res.status(200).json({
-        success: false,
-        message:
-          "Payment was not successful. Your order has been marked as failed.",
-        orderId: order.order_id,
-      });
-    }
-  } catch(error) {
-    console.error("Verification Error:",error);
-    next(error);
+  } catch (error) {
+    console.log("Error to verify payment")
   }
-};
+}
 
-const generateAvatar = async (req,res,next) => {
+
+// const verifyPayment = async (req, res, next) => {
+//   try {
+//     const { sessionId } = req.body;
+
+
+//     const isTransactionAvilible = await Transaction.findOne({
+//       where: { stripe_session_id: sessionId },
+//     });
+
+
+//     if (isTransactionAvilible) {
+//       if (isTransactionAvilible.status == 'paid') {
+//         sendResponse(res, `Payment has been successfully paid and your ${isTransactionAvilible.type == order ? "order has been placed" : "subscription has been added to your account"}`, 200)
+//       }
+//       else {
+//         throw new CoustomError("Payment failed please contract admin", 400)
+//       }
+//     }
+
+
+
+//     // console.log("sessionId", sessionId);
+//     // if (!sessionId) throw new CoustomError("Session ID is required", 400);
+
+//     // const existingTx = await Transaction.findOne({
+//     //   where: { stripe_session_id: sessionId },
+//     // });
+//     // if (existingTx)
+//     //   throw new CoustomError(
+//     //     "This transaction has already been processed.",
+//     //     400,
+//     //   );
+
+//     // let session;
+//     // try {
+//     //   session = await stripe.checkout.sessions.retrieve(sessionId, {
+//     //     expand: ["invoice", "subscription", "payment_intent", "customer"],
+//     //   });
+//     // } catch (err) {
+//     //   console.log("err", err);
+//     //   throw new CoustomError("Invalid Session ID", 400);
+//     // }
+//     // const { metadata, payment_status, mode, subscription } = session;
+
+//     // // if (metadata && (metadata.action === 'purchase_subscription' || metadata.action === 'upgrade_to_yearly_scheduled')) {
+//     // //   const isPaid = payment_status === "paid";
+//     // //   if (!isPaid) {
+//     // //     throw new CoustomError("Subscription payment failed.", 400);
+//     // //   }
+
+//     // //   const userId = metadata.userId;
+//     // //   const planId = metadata.planId || metadata.yearlyPlanId;
+//     // //   const planDuration = metadata.planDuration;
+
+//     // //   const currentActiveSub = await Subscriber.findOne({
+//     // //     where: { user_id: userId, status: 'active' }
+//     // //   });
+
+//     // //   let startDate = new Date();
+//     // //   let calculatedStatus = "active";
+//     // //   if (currentActiveSub) {
+//     // //     startDate = new Date(currentActiveSub.end_date);
+//     // //     calculatedStatus = "scheduled";
+//     // //   }
+//     // //   let endDate = new Date(startDate);
+//     // //   if (planDuration === 'year') {
+//     // //     endDate.setFullYear(endDate.getFullYear() + 1);
+//     // //   } else {
+//     // //     endDate.setMonth(endDate.getMonth() + 1);
+//     // //   }
+
+//     // //   const subscriberRecord = await Subscriber.create({
+//     // //     user_id: userId,
+//     // //     plan_id: planId,
+//     // //     stripe_subscription_id: null,
+//     // //     status: calculatedStatus,
+//     // //     start_date: startDate,
+//     // //     end_date: endDate,
+//     // //     stripe_invoice_url: session.invoice?.hosted_invoice_url || null,
+//     // //     stripe_invoice_pdf: session.invoice?.invoice_pdf || null,
+//     // //     payment_method: session.payment_method_types[0] || "card",
+//     // //   });
+
+//     // //   const transaction = await Transaction.create({
+//     // //     user_id: userId,
+//     // //     subscription_id: subscriberRecord.id,
+//     // //     stripe_session_id: sessionId,
+//     // //     transaction_id: session.payment_intent?.id || session.payment_intent || "n/a",
+//     // //     payment_intent_id: session.payment_intent?.id || session.payment_intent || null,
+//     // //     invoice_id: session.invoice?.id || null,
+//     // //     invoice_url: session.invoice?.hosted_invoice_url || null,
+//     // //     amount: session.amount_total / 100,
+//     // //     status: "paid",
+//     // //     payment_method: session.payment_method_types[0] || "card",
+//     // //     subscription_plan_id: planId,
+//     // //   });
+
+//     // //   await subscriberRecord.update({ transaction_id: transaction.id });
+
+//     // //   if (calculatedStatus === "active") {
+//     // //     await User.update(
+//     // //       {
+//     // //         active_plan_id: planId,
+//     // //         current_subscription_id: subscriberRecord.id,
+//     // //         stripe_subscription_id: null
+//     // //       },
+//     // //       { where: { id: userId } }
+//     // //     );
+
+//     // //     return sendResponse(res, "Subscription activated successfully (Manual Loop)", 200, {
+//     // //       subscriptionId: subscriberRecord.id,
+//     // //       status: "active"
+//     // //     });
+//     // //   } else {
+//     // //     return sendResponse(res, "Next subscription plan scheduled in queue successfully", 200, {
+//     // //       subscriptionId: subscriberRecord.id,
+//     // //       status: "scheduled",
+//     // //       activationDate: startDate
+//     // //     });
+//     // //   }
+//     // // }
+
+
+//     // const orderId = session.metadata.order_id;
+//     // const userId = session.metadata.user_id;
+//     // // const cartIds = JSON.parse(session.metadata.cart_id);
+//     // // const metadata = session.metadata;
+
+//     // let cartIds = null;
+//     // let isReorder = metadata.is_reorder === "true";
+
+//     // if (isReorder) {
+//     //   const oldOrderId = metadata.order_id;
+//     //   console.log("Processing Reorder for Order ID:", oldOrderId);
+//     //   cartIds = [];
+//     // } else {
+//     //   try {
+//     //     cartIds = metadata.cart_id ? JSON.parse(metadata.cart_id) : [];
+//     //   } catch (e) {
+//     //     cartIds = [];
+//     //   }
+//     // }
+
+//     // const order = await Order.findByPk(orderId);
+//     // if (!order) throw new CoustomError("Order not found", 404);
+
+//     // const invoiceUrl = session.invoice
+//     //   ? session.invoice.hosted_invoice_url
+//     //   : null;
+//     // const invoiceId =
+//     //   session.invoice?.id ||
+//     //   (typeof session.invoice === "string" ? session.invoice : null);
+
+//     // if (session.payment_status === "paid") {
+//     //   await order.update({
+//     //     order_status: "Placed",
+//     //     payment_method: session.payment_method_types[0],
+//     //   });
+
+//     //   await Transaction.create({
+//     //     user_id: userId,
+//     //     order_id: order.id,
+//     //     stripe_session_id: sessionId,
+//     //     payment_intent_id: session.payment_intent,
+//     //     transaction_id: session.payment_intent,
+//     //     amount: session.amount_total / 100,
+//     //     status: session.payment_status,
+//     //     invoice_id: invoiceId,
+//     //     invoice_url: invoiceUrl,
+//     //     payment_method: session.payment_method_types[0],
+//     //   });
+
+//     //   const userData = await User.findByPk(userId);
+//     //   if (userData) await userData.increment("orders", { by: 1 });
+
+//     //   if (!isReorder && cartIds.length > 0) {
+//     //     await Cart.destroy({ where: { id: cartIds, user_id: userId } });
+//     //   }
+
+//     //   try {
+//     //     const bambiniResponse = await createOrder(orderId, userData);
+
+//     //     if (bambiniResponse.status) {
+//     //       await order.update({
+//     //         retailer_order_id: bambiniResponse.order_id,
+//     //         retailer_status: "Success",
+//     //       });
+//     //       console.log("Bambini Order Placed:", bambiniResponse.order_id);
+//     //     } else {
+//     //       await order.update({
+//     //         retailer_status: "Failed",
+//     //         retailer_error_log: JSON.stringify(
+//     //           bambiniResponse.errors || bambiniResponse.message,
+//     //         ),
+//     //       });
+
+//     //       console.error(
+//     //         "Bambini Rejected Order but Payment is Done:",
+//     //         bambiniResponse.errors,
+//     //       );
+//     //     }
+//     //   } catch (bambiniErr) {
+//     //     await order.update({
+//     //       retailer_status: "Failed",
+//     //       retailer_error_log: bambiniErr.message,
+//     //     });
+//     //     console.error("Bambini API Error:", bambiniErr);
+//     //   }
+
+//     //   return sendResponse(res, "Order placed successfully", 200, {
+//     //     orderId: order.order_id,
+//     //   });
+//     // } else {
+//     //   await order.update({ order_status: "Failed" });
+//     //   await Transaction.create({
+//     //     user_id: userId,
+//     //     order_id: order.id,
+//     //     stripe_session_id: sessionId,
+//     //     payment_intent_id: session.payment_intent,
+//     //     transaction_id: session.payment_intent,
+//     //     amount: session.amount_total / 100,
+//     //     // status: session.payment_status,
+//     //     status: "failed",
+//     //     invoice_url: null,
+//     //     invoice_id: invoiceId,
+//     //     payment_method: session.payment_method_types[0] || "n/a",
+//     //   });
+
+//     //   return res.status(200).json({
+//     //     success: false,
+//     //     message:
+//     //       "Payment was not successful. Your order has been marked as failed.",
+//     //     orderId: order.order_id,
+//     //   });
+//     // }
+//   } catch (error) {
+//     console.error("Verification Error:", error);
+//     next(error);
+//   }
+// };
+
+const generateAvatar = async (req, res, next) => {
   try {
-    if(!req.file) {
+    if (!req.file) {
       return res.status(400).json({ message: "Please upload an image file." });
     }
 
@@ -3134,9 +3239,9 @@ const generateAvatar = async (req,res,next) => {
         <circle cx="${radius}" cy="${radius}" r="${radius}" fill="black" />
       </svg>`,
     );
-    console.log("circleMask",circleMask);
+    console.log("circleMask", circleMask);
     const processedImageBuffer = await sharp(req.file.buffer)
-      .resize(width,width,{
+      .resize(width, width, {
         fit: "cover",
         position: "center",
       })
@@ -3148,7 +3253,7 @@ const generateAvatar = async (req,res,next) => {
       ])
       .png()
       .toBuffer();
-    console.log("processedImageBuffer",processedImageBuffer);
+    console.log("processedImageBuffer", processedImageBuffer);
     const base64Avatar = processedImageBuffer.toString("base64");
     const imageData = `data:image/png;base64,${base64Avatar}`;
     res.status(200).json({
@@ -3156,8 +3261,8 @@ const generateAvatar = async (req,res,next) => {
       message: "Avatar generated successfully",
       avatar: imageData,
     });
-  } catch(error) {
-    console.error("Avatar Generation Error:",error);
+  } catch (error) {
+    console.error("Avatar Generation Error:", error);
     res.status(500).json({
       success: false,
       error: "Failed to process image. Make sure the file is a valid image.",
@@ -3248,49 +3353,49 @@ const generateAvatar = async (req,res,next) => {
 //   }
 // };
 
-const buyAgain = async (req,res,next) => {
+const buyAgain = async (req, res, next) => {
   try {
     const user_id = req.user.id;
-    const { id,type } = req.body;
+    const { id, type } = req.body;
 
     let productIds = [];
     let baseOrderData = null;
 
-    if(type === "order") {
+    if (type === "order") {
       const orderData = await Order.findOne({
-        where: { id: id,user_id: user_id },
+        where: { id: id, user_id: user_id },
         include: [
           {
             model: Address,
             as: "order_address",
-            attributes: { exclude: ["createdAt","updatedAt"] },
+            attributes: { exclude: ["createdAt", "updatedAt"] },
           },
         ],
       });
 
-      if(!orderData) throw new CoustomError("Order not found",404);
+      if (!orderData) throw new CoustomError("Order not found", 404);
       const items =
         typeof orderData.items === "string"
           ? JSON.parse(orderData.items)
           : orderData.items;
       productIds = items.map((item) => item.product_id);
       baseOrderData = orderData;
-    } else if(type === "product") {
+    } else if (type === "product") {
       productIds = [id];
     } else {
-      throw new CoustomError("Invalid type provided",400);
+      throw new CoustomError("Invalid type provided", 400);
     }
-    if(productIds.length === 0)
-      throw new CoustomError("No products found to buy",400);
+    if (productIds.length === 0)
+      throw new CoustomError("No products found to buy", 400);
 
     const products = await Product.findAll({ where: { id: productIds } });
 
     const formattedProducts = await Promise.all(
-      products.map((p) => getCalculatedProducts({ user_id,product_id: p.id })),
+      products.map((p) => getCalculatedProducts({ user_id, product_id: p.id })),
     );
 
     const defaultAddress = await Address.findOne({
-      where: { user_id,is_default: 1 },
+      where: { user_id, is_default: 1 },
     });
     const addressToUse =
       type === "order" && baseOrderData?.order_address
@@ -3319,11 +3424,11 @@ const buyAgain = async (req,res,next) => {
           baseOrderData?.order_address?.id ?? defaultAddress?.id ?? null,
       };
 
-    sendResponse(res,"Data fetched successfully",200,{
+    sendResponse(res, "Data fetched successfully", 200, {
       orders: formattedOrderData,
       products: formattedProducts,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
@@ -3451,22 +3556,22 @@ const buyAgain = async (req,res,next) => {
 //   }
 // };
 
-const createReorderCheckoutSession = async (req,res,next) => {
+const createReorderCheckoutSession = async (req, res, next) => {
   try {
-    const { id,shipping_address_id,productList } = req.body;
+    const { id, shipping_address_id, productList } = req.body;
     const userId = req.user.id;
     let products = productList;
     // console.log("products", products);
     let itemsToProcess = [];
     let oldOrder = null;
 
-    if(id && Number(id) > 0) {
+    if (id && Number(id) > 0) {
       oldOrder = await Order.findOne({
-        where: { id: id,user_id: userId },
-        include: [{ model: Address,as: "order_address" }],
+        where: { id: id, user_id: userId },
+        include: [{ model: Address, as: "order_address" }],
       });
 
-      if(!oldOrder) throw new CoustomError("Original order not found",404);
+      if (!oldOrder) throw new CoustomError("Original order not found", 404);
 
       itemsToProcess =
         products && products.length > 0
@@ -3474,7 +3579,7 @@ const createReorderCheckoutSession = async (req,res,next) => {
           : typeof oldOrder.items === "string"
             ? JSON.parse(oldOrder.items)
             : oldOrder.items;
-    } else if(products && products.length > 0) {
+    } else if (products && products.length > 0) {
       itemsToProcess = products;
     } else {
       throw new CoustomError(
@@ -3485,7 +3590,7 @@ const createReorderCheckoutSession = async (req,res,next) => {
 
     // --- Price Calculation (Generic for both cases) ---
     const productIds = itemsToProcess.map((item) => item.id || item.product_id);
-    console.log("productIds",productIds);
+    console.log("productIds", productIds);
     const productDetailsList = await getCalculatedProducts({
       user_id: userId,
       product_id: productIds,
@@ -3495,8 +3600,8 @@ const createReorderCheckoutSession = async (req,res,next) => {
       const pId = item.id || item.product_id;
       // console.log(object)
       const latestData = productDetailsList.find((p) => p.id == pId);
-      if(!latestData)
-        throw new CoustomError(`Product ${pId} is not available`,400);
+      if (!latestData)
+        throw new CoustomError(`Product ${pId} is not available`, 400);
       return {
         product_id: pId,
         product_name: latestData.product_name,
@@ -3511,38 +3616,38 @@ const createReorderCheckoutSession = async (req,res,next) => {
     let fullAddressText = null;
     let finalAddressId = shipping_address_id;
 
-    if(shipping_address_id) {
+    if (shipping_address_id) {
       const addressData = await Address.findOne({
-        where: { user_id: userId,id: shipping_address_id },
+        where: { user_id: userId, id: shipping_address_id },
       });
-      if(!addressData)
-        throw new CoustomError("This shipping address is not found",404);
+      if (!addressData)
+        throw new CoustomError("This shipping address is not found", 404);
 
-      if(addressData) {
+      if (addressData) {
         fullAddressText = `${addressData.street_address}, ${addressData.apartment ? addressData.apartment + ", " : ""}${addressData.city}, ${addressData.state} - ${addressData.zip_code}`;
       }
-    } else if(oldOrder && oldOrder.order_address) {
+    } else if (oldOrder && oldOrder.order_address) {
       const addr = oldOrder.order_address;
       fullAddressText = `${addr.street_address}, ${addr.apartment ? addr.apartment + ", " : ""}${addr.city}, ${addr.state} - ${addr.zip_code}`;
       finalAddressId = oldOrder.order_address.id;
     } else {
       const defaultAddr = await Address.findOne({
-        where: { user_id: userId,is_default: 1 },
+        where: { user_id: userId, is_default: 1 },
       });
-      if(!defaultAddr)
-        throw new CoustomError("Default shipping address is required",400);
-      if(defaultAddr) {
+      if (!defaultAddr)
+        throw new CoustomError("Default shipping address is required", 400);
+      if (defaultAddr) {
         fullAddressText = `${defaultAddr.street_address}, ${defaultAddr.city} - ${defaultAddr.zip_code}`;
         finalAddressId = defaultAddr.id;
       }
     }
-    if(!fullAddressText)
-      throw new CoustomError("Shipping address is required",400);
+    if (!fullAddressText)
+      throw new CoustomError("Shipping address is required", 400);
 
-    const totalAmount = itemsList.reduce((sum,item) => sum + item.subtotal,0);
-    const totalQty = itemsList.reduce((sum,item) => sum + item.quantity,0);
-    if(totalAmount < 0.5)
-      throw new CoustomError("Minimum amount is $0.50",400);
+    const totalAmount = itemsList.reduce((sum, item) => sum + item.subtotal, 0);
+    const totalQty = itemsList.reduce((sum, item) => sum + item.quantity, 0);
+    if (totalAmount < 0.5)
+      throw new CoustomError("Minimum amount is $0.50", 400);
 
     const newOrder = await Order.create({
       user_id: userId,
@@ -3568,6 +3673,7 @@ const createReorderCheckoutSession = async (req,res,next) => {
     const session = await stripe.checkout.sessions.create({
       line_items,
       mode: "payment",
+      invoice_creation: { enabled: true },
       metadata: {
         order_id: newOrder.id,
         user_id: userId,
@@ -3578,18 +3684,18 @@ const createReorderCheckoutSession = async (req,res,next) => {
       cancel_url: `https://mern.yilstaging.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
     });
 
-    sendResponse(res,"Checkout session created",200,{ url: session.url });
-  } catch(error) {
+    sendResponse(res, "Checkout session created", 200, { url: session.url });
+  } catch (error) {
     next(error);
   }
 };
 
-const getAllOrders = async (req,res,next) => {
+const getAllOrders = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const orders = await Order.findAll({
       where: { user_id },
-      order: [["order_date","DESC"]],
+      order: [["order_date", "DESC"]],
       attributes: {
         exclude: [
           "createdAt",
@@ -3610,23 +3716,23 @@ const getAllOrders = async (req,res,next) => {
         items: undefined,
       };
     });
-    sendResponse(res,"Orders fetched successfully",200,{
+    sendResponse(res, "Orders fetched successfully", 200, {
       orders: formattedOrders,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const fetchOrderDetails = async (req,res,next) => {
+const fetchOrderDetails = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const { id } = req.body;
 
     const order = await Order.findOne({
-      where: { id,user_id },
+      where: { id, user_id },
       attributes: {
-        exclude: ["createdAt","updatedAt","user_id"],
+        exclude: ["createdAt", "updatedAt", "user_id"],
       },
       include: [
         {
@@ -3637,14 +3743,14 @@ const fetchOrderDetails = async (req,res,next) => {
         {
           model: Address,
           as: "order_address",
-          attributes: { exclude: ["createdAt","updatedAt"] },
+          attributes: { exclude: ["createdAt", "updatedAt"] },
         },
       ],
       raw: true,
       nest: true,
     });
-    if(!order) {
-      throw new CoustomError("Order not found",404);
+    if (!order) {
+      throw new CoustomError("Order not found", 404);
     }
     const items =
       typeof order.items === "string" ? JSON.parse(order.items) : order.items;
@@ -3654,9 +3760,9 @@ const fetchOrderDetails = async (req,res,next) => {
       user_id,
       product_id: productIds,
     });
-
+    // console.log("products", products)
     const formattedProducts = items.map((item) => {
-      const pData = products.find((p) => p.id === item.product_id);
+      const pData = products.find((p) => p.id == item.product_id);
       // console.log("pData", pData);
       return {
         product_name: pData?.product_name || "Product",
@@ -3671,16 +3777,16 @@ const fetchOrderDetails = async (req,res,next) => {
     });
 
     const totalItemsCount = formattedProducts.reduce(
-      (acc,curr) => acc + curr.quantity,
+      (acc, curr) => acc + curr.quantity,
       0,
     );
     const totalItemsPrice = formattedProducts.reduce(
-      (acc,curr) => acc + curr.sale_price * curr.quantity,
+      (acc, curr) => acc + curr.sale_price * curr.quantity,
       0,
     );
 
     const totalItemsPriceForDiscount = formattedProducts.reduce(
-      (acc,curr) => acc + curr.actual_price * curr.quantity,
+      (acc, curr) => acc + curr.actual_price * curr.quantity,
       0,
     );
 
@@ -3697,9 +3803,9 @@ const fetchOrderDetails = async (req,res,next) => {
       };
     });
 
-    const grandTotal = formatedOrder.reduce((acc,cur) => {
+    const grandTotal = formatedOrder.reduce((acc, cur) => {
       return acc + Number(cur.actual_price);
-    },0);
+    }, 0);
 
     const orderSummary = {
       item_sum: formatedOrder,
@@ -3728,7 +3834,7 @@ const fetchOrderDetails = async (req,res,next) => {
       status: order.order_status,
       invoice_url: order.transaction.invoice_url,
       order_date: orderDateObj.toISOString().split("T")[0],
-      order_time: orderDateObj.toLocaleTimeString([],{
+      order_time: orderDateObj.toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
@@ -3755,7 +3861,7 @@ const fetchOrderDetails = async (req,res,next) => {
       tracking_url: "https://mern.yilstaging.com/" || null,
     };
 
-    sendResponse(res,"Order summary fetched successfully",200,finalData);
+    sendResponse(res, "Order summary fetched successfully", 200, finalData);
 
     // let fullAddressText;
     // if (order && order.order_address) {
@@ -3794,15 +3900,15 @@ const fetchOrderDetails = async (req,res,next) => {
     //   order: formattedOrder,
     //   products: productsWithQuantities,
     // });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const cancelMyOrder = async (req,res,next) => {
+const cancelMyOrder = async (req, res, next) => {
   try {
     const user_id = req.user.id;
-    const { id,reason,cancellation_comment } = req.body;
+    const { id, reason, cancellation_comment } = req.body;
     const order = await Order.findOne({
       where: {
         id,
@@ -3810,8 +3916,8 @@ const cancelMyOrder = async (req,res,next) => {
         order_status: "Placed",
       },
     });
-    if(!order) {
-      throw new CoustomError("Order not found or cannot be cancelled",404);
+    if (!order) {
+      throw new CoustomError("Order not found or cannot be cancelled", 404);
     }
     await order.update({
       is_cancelled: 1,
@@ -3819,32 +3925,32 @@ const cancelMyOrder = async (req,res,next) => {
       reason: reason || "No reason provided",
       cancellation_comment: cancellation_comment || "No comment provided",
     });
-    sendResponse(res,"Order cancelled successfully",200);
-  } catch(error) {
+    sendResponse(res, "Order cancelled successfully", 200);
+  } catch (error) {
     next(error);
   }
 };
 
-const getAllCountryCode = async (req,res,next) => {
+const getAllCountryCode = async (req, res, next) => {
   try {
     const countries = Country.getAllCountries().map((c) => ({
       name: c.name,
       isoCode: c.isoCode,
     }));
 
-    sendResponse(res,"Fetching all country list",200,{
+    sendResponse(res, "Fetching all country list", 200, {
       countries,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const getAllStateCode = async (req,res,next) => {
+const getAllStateCode = async (req, res, next) => {
   try {
     const { country_code } = req.body; // Example: "IN", "US"
     // console.log("country_code", country_code);
-    if(!country_code) {
+    if (!country_code) {
       return res.status(400).json({ message: "Country Code is required" });
     }
 
@@ -3853,15 +3959,15 @@ const getAllStateCode = async (req,res,next) => {
       isoCode: s.isoCode,
     }));
     // console.log("states", states);
-    sendResponse(res,"Order cancelled successfully",200,{
+    sendResponse(res, "Order cancelled successfully", 200, {
       states: states,
     });
-  } catch(error) {
+  } catch (error) {
     next(error);
   }
 };
 
-const allProduct = async (req,res,next) => {
+const allProduct = async (req, res, next) => {
   try {
     const allPro = await Product.findAll({
       where: {
@@ -3870,16 +3976,16 @@ const allProduct = async (req,res,next) => {
         },
       },
     });
-    sendResponse(res,"",200,allPro);
-  } catch(error) {
+    sendResponse(res, "", 200, allPro);
+  } catch (error) {
     next(error);
   }
 };
 
-const getRecommendedProduct = async (req,res,next) => {
+const getRecommendedProduct = async (req, res, next) => {
   try {
     const user_id = req.user.id;
-    const { image_width,image_height,landmarks } = req.body;
+    const { image_width, image_height, landmarks } = req.body;
     const allProduct = await Product.findAll({
       where: {
         sale_price: {
@@ -3900,25 +4006,26 @@ const getRecommendedProduct = async (req,res,next) => {
         productSize: allSize,
       },
     );
-    if(!predictedProduct) {
-      throw new CoustomError("there is an error through ai",400);
+    if (!predictedProduct) {
+      throw new CoustomError("there is an error through ai", 400);
     }
 
     // console.log("predictedProduct", predictedProduct.data.data.products);
     const productData = predictedProduct.data.data.products;
     const productIds = [...new Set(productData.map((item) => item.id))];
-    const productsWithPrices = await getCalculatedProducts({
+    const productsWithPrices = await getCalculatedProductsWithSuffling({
       product_id: productIds,
-      // user_id,
+      user_id,
     });
-    sendResponse(res,"Featched all the product",200,productsWithPrices);
-  } catch(error) {
-    console.log("Error ",error)
+
+    sendResponse(res, "Featched all the product", 200, productsWithPrices);
+  } catch (error) {
+    console.log("Error ", error)
     next(error);
   }
 };
 
-const generateBabyTryOn = async (req,res,next) => {
+const generateBabyTryOn = async (req, res, next) => {
   try {
     const product_id = req.body.id;
     const { id } = req.user;
@@ -3928,7 +4035,7 @@ const generateBabyTryOn = async (req,res,next) => {
       }
     });
 
-    if(!isSubScribed) throw new CoustomError("You don't have a subscription to use this features. Please subscribe first",400)
+    if (!isSubScribed) throw new CoustomError("You don't have a subscription to use this features. Please subscribe first", 400)
     const userData = await User.findOne({
       where: {
         id,
@@ -3937,24 +4044,24 @@ const generateBabyTryOn = async (req,res,next) => {
       }
     })
 
-    if(userData.scan_token < 0) throw new CoustomError("You don't have enough token for scan or use this features!",400)
+    if (userData.scan_token < 0) throw new CoustomError("You don't have enough token for scan or use this features!", 400)
 
     let baby_img_url
     let BabyProfileData
     let garment_url
-    if(userData) {
-      if(userData.selected_baby) {
+    if (userData) {
+      if (userData.selected_baby) {
         BabyProfileData = await BabyProfile.findOne({
           where: {
             user_id: userData.id,
             id: userData.selected_baby
           }
         });
-        if(!BabyProfileData) {
-          throw new CoustomError(`You don't have the baby to applay this garment`,400)
+        if (!BabyProfileData) {
+          throw new CoustomError(`You don't have the baby to applay this garment`, 400)
         }
-        if(!BabyProfileData?.baby_profile_image) {
-          throw new CoustomError("You don't have a image of this baby",400)
+        if (!BabyProfileData?.baby_profile_image) {
+          throw new CoustomError("You don't have a image of this baby", 400)
         }
         baby_img_url = `${process.env.BACKEND_URL}/baby-image/${BabyProfileData.baby_profile_image}`
         const productData = await Product.findOne({
@@ -3968,30 +4075,30 @@ const generateBabyTryOn = async (req,res,next) => {
             typeof productData.product_images === "string"
               ? JSON.parse(productData.product_images || "[]")
               : productData.product_images || [];
-        } catch(e) {
+        } catch (e) {
           formattedImages = [];
         }
-        if(formattedImages.length < 0) {
-          throw new CoustomError('Product image not found',400)
+        if (formattedImages.length < 0) {
+          throw new CoustomError('Product image not found', 400)
         }
         garment_url = formattedImages[0]
       } else {
-        throw new CoustomError('Please add or select the baby first for use try-on feature',400)
+        throw new CoustomError('Please add or select the baby first for use try-on feature', 400)
       }
     } else {
-      throw new CoustomError('User not found!',404)
+      throw new CoustomError('User not found!', 404)
     }
 
     console.log("Downloading and converting images...");
-    const [babyBase64,garmentBase64] = await Promise.all([
+    const [babyBase64, garmentBase64] = await Promise.all([
       getBase64FromUrl(baby_img_url),
-      getBase64FromUrl(garment_url,{
+      getBase64FromUrl(garment_url, {
         "x-app-id": "BabyAiApp-Frontend-v1",
       }),
     ]);
 
     // const BASE_URL = "https://api.fashn.ai/v1";
-    const BASE_URL = process.env.FASHN_AI_BASE_URL;
+    // const BASE_URL = process.env.FASHN_AI_BASE_URL;
     const inputData = {
       model_name: "tryon-max",
       inputs: {
@@ -4010,60 +4117,60 @@ const generateBabyTryOn = async (req,res,next) => {
     let outputimage;
     try {
 
-      // const runResponse = await fetch(`${BASE_URL}/run`, {
+      // const runResponse = await fetch(`${FASHN_BASE_URL}/run`, {
       //   method: "POST",
       //   headers: headers,
       //   body: JSON.stringify(inputData),
       // });
       let runResponse = {};
       const runData = await runResponse.json();
-      console.log("runData",runData);
+      console.log("runData", runData);
       const predictionId = runData.id;
-      console.log("Prediction started, ID:",predictionId);
-      while(true) {
+      console.log("Prediction started, ID:", predictionId);
+      while (true) {
         const statusResponse = await fetch(
-          `${BASE_URL}/status/${predictionId}`,
+          `${FASHN_BASE_URL}/status/${predictionId}`,
           {
             headers: headers,
           },
         );
         const statusData = await statusResponse.json();
         outputimage = statusData;
-        if(statusData.status === "completed") {
+        if (statusData.status === "completed") {
           console.log("Prediction completed.");
           // console.log(statusData.output);
           outputimage = statusData;
-          if(statusData.output && statusData.output[0]) {
-            const savedFileName = saveOutputImage(statusData.output[0],'baby-tryon',userData.id,userData.selected_baby,product_id);
-            if(savedFileName) {
+          if (statusData.output && statusData.output[0]) {
+            const savedFileName = saveOutputImage(statusData.output[0], 'baby-tryon', userData.id, userData.selected_baby, product_id);
+            if (savedFileName) {
               outputimage.saved_filename = savedFileName;
             }
           }
           break;
-        } else if(
-          ["starting","in_queue","processing"].includes(statusData.status)
+        } else if (
+          ["starting", "in_queue", "processing"].includes(statusData.status)
         ) {
-          console.log("Prediction status:",statusData.status);
+          console.log("Prediction status:", statusData.status);
           // outputimage = statusData;
-          await new Promise((resolve) => setTimeout(resolve,3000));
+          await new Promise((resolve) => setTimeout(resolve, 3000));
         } else {
-          console.log("Prediction failed:",statusData.error);
+          console.log("Prediction failed:", statusData.error);
           outputimage = statusData;
           break;
         }
-        console.log("statusData",statusData);
+        console.log("statusData", statusData);
       }
-    } catch(error) {
-      console.error("Error:",error.message);
+    } catch (error) {
+      console.error("Error:", error.message);
     }
 
-    sendResponse(res,"Your try on is genrated now",200);
-  } catch(error) {
+    sendResponse(res, "Your try on is genrated now", 200);
+  } catch (error) {
     next(error);
   }
 };
 
-const allFitingRoomProduct = async (req,res,next) => {
+const allFitingRoomProduct = async (req, res, next) => {
   try {
     const { id } = req.user
     const userData = await User.findOne({
@@ -4074,15 +4181,15 @@ const allFitingRoomProduct = async (req,res,next) => {
         "selected_baby"
       ]
     })
-    if(userData.selected_baby == 0) {
-      throw new CoustomError('Please select your baby first',400)
+    if (userData.selected_baby == 0) {
+      throw new CoustomError('Please select your baby first', 400)
     }
 
     const BabyDataForRes = await BabyProfile.findAll({
       where: {
         user_id: id,
       },
-      attributes: ["id","baby_profile_image"],
+      attributes: ["id", "baby_profile_image"],
       raw: true,
     });
 
@@ -4111,7 +4218,7 @@ const allFitingRoomProduct = async (req,res,next) => {
           as: "tryOnProducts",
         }
       ],
-      order: [['createdAt','DESC']],
+      order: [['createdAt', 'DESC']],
     });
 
     const productIds = tryOnRecords.map((record) => {
@@ -4145,20 +4252,105 @@ const allFitingRoomProduct = async (req,res,next) => {
         product_id: record.product_id,
       };
     });
-    sendResponse(res,"Here is fiting room data",200,{
+    sendResponse(res, "Here is fiting room data", 200, {
       formattedBabyData,
       formattedTryOnProducts,
     })
-  } catch(error) {
+  } catch (error) {
     next(error)
   }
 }
 
-const removeFromFitingRoom = async (req,res,next) => {
+const getAllFitingRoomData = async (req, res, next) => {
+  try {
+    const { id } = req.user
+    const userData = await User.findOne({
+      where: {
+        id
+      }
+    })
+
+    const BabyDataForRes = await BabyProfile.findAll({
+      where: {
+        user_id: id,
+      },
+      attributes: ["id", "baby_profile_image"],
+      raw: true,
+    });
+
+    const formattedBabyData = BabyDataForRes.map((baby) => {
+      return {
+        ...baby,
+        baby_profile_image: baby.baby_profile_image
+          ? baby.baby_profile_image.startsWith("http")
+            ? baby.baby_profile_image
+            : `${process.env.BACKEND_URL}/baby-image/${baby.baby_profile_image}`
+          : null,
+
+        selected: userData && userData.selected_baby && String(baby.id) === String(userData.selected_baby)
+          ? true
+          : false,
+      };
+    });
+
+    const tryOnRecords = await BabyTRYON.findAll({
+      where: {
+        try_on_user_id: userData.id,
+      },
+      include: [
+        {
+          model: Product,
+          as: "tryOnProducts",
+        }
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    const productIds = tryOnRecords.map((record) => {
+      return record.try_on_product_id;
+    });
+    const productsWithPrices = await Promise.all(
+      productIds.map(async (pId) => {
+        return await getCalculatedProducts({
+          product_id: pId,
+          user_id: userData.id,
+        });
+      }),
+    );
+
+    const formattedTryOnProducts = tryOnRecords.map((record) => {
+      const productPriceDetails = productsWithPrices.find(
+        (p) => p && String(p.id) === String(record.try_on_product_id)
+      );
+      const isOutOfStock = !productPriceDetails || productPriceDetails.stock_count <= 0;
+      const tryOnImage = record.try_on_avtar
+        ? record.try_on_avtar.startsWith("http")
+          ? record.try_on_avtar
+          : `${process.env.BACKEND_URL}/baby-try-on-image/${record.try_on_avtar}`
+        : null;
+
+      return {
+        ...(productPriceDetails || {}),
+        try_on_id: record.id,
+        product_id: record.product_id,
+        try_on_product_avatar: tryOnImage,
+        product_status: isOutOfStock ? "Item Out of Stock" : "In Stock",
+      };
+    });
+    sendResponse(res, "Here is fiting room data", 200, {
+      formattedBabyData,
+      formattedTryOnProducts,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+const removeFromFitingRoom = async (req, res, next) => {
   try {
     const { id } = req.user
     const { try_on_id } = req.body
-    if(!try_on_id) throw new CoustomError('Please provide the id for remove',400)
+    if (!try_on_id) throw new CoustomError('Please provide the id for remove', 400)
     const record = await BabyTRYON.findOne({
       where: {
         id: try_on_id,
@@ -4166,58 +4358,58 @@ const removeFromFitingRoom = async (req,res,next) => {
       }
     });
 
-    if(!record) throw new CoustomError('Baby avatar not found',400)
+    if (!record) throw new CoustomError('Baby avatar not found', 400)
     await record.destroy();
 
-    if(record.try_on_avtar) {
-      const filePath = path.join(__dirname,'../../../files/uploads',record.try_on_avtar);
+    if (record.try_on_avtar) {
+      const filePath = path.join(__dirname, '../../../files/uploads', record.try_on_avtar);
       try {
         await fs.unlink(filePath);
         console.log(`File deleted successfully: ${filePath}`);
-      } catch(fileError) {
-        console.error("Database record deleted, but failed to delete physical file:",fileError.message);
+      } catch (fileError) {
+        console.error("Database record deleted, but failed to delete physical file:", fileError.message);
         next(fileError)
       }
     }
 
-    sendResponse(res,"The baby avatar has been deleted now",200,1);
-  } catch(error) {
+    sendResponse(res, "The baby avatar has been deleted now", 200, 1);
+  } catch (error) {
     next(error)
   }
 }
 
-const getOrder = async (req,res,next) => {
+const getOrder = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const orderId = req.body.id;
     const userData = await User.findByPk(user_id);
-    const order = await createOrder(orderId,userData);
-    sendResponse(res,"Bambini order response",200,order);
-  } catch(error) {
+    const order = await createOrder(orderId, userData);
+    sendResponse(res, "Bambini order response", 200, order);
+  } catch (error) {
     next(error);
   }
 };
 
-const trackOrderC = async (req,res,next) => {
+const trackOrderC = async (req, res, next) => {
   try {
     const user_id = req.user.id;
     const orderId = req.body.id;
     const ordertracking = await trackOrder();
-    sendResponse(res,"Bambini order tracking response",200,ordertracking);
-  } catch(error) {
+    sendResponse(res, "Bambini order tracking response", 200, ordertracking);
+  } catch (error) {
     next(error);
   }
 };
 
-const generateBabyTryOnModal = async (req,res,next) => {
+const generateBabyTryOnModal = async (req, res, next) => {
   const tempDownloadedPath = `files/uploads/downloaded-${Date.now()}.jpg`;
   const compressedPath = `files/uploads/compressed-${Date.now()}.jpg`;
 
   try {
     const prompt = req.body.prompt;
     const productId = req.body.id;
-    if(!productId) {
-      throw new CoustomError("Product ID (productId) is required to fetch the garment image.",400)
+    if (!productId) {
+      throw new CoustomError("Product ID (productId) is required to fetch the garment image.", 400)
     }
 
     const idCreated = await ProductAIImage.findOne({
@@ -4226,14 +4418,14 @@ const generateBabyTryOnModal = async (req,res,next) => {
       }
     });
 
-    if(idCreated) {
-      throw new CoustomError("It's already created now",400)
+    if (idCreated) {
+      throw new CoustomError("It's already created now", 400)
     }
     const productData = await Product.findOne({
       where: { id: productId }
     });
 
-    if(!productData) {
+    if (!productData) {
       return res.status(404).json({
         success: false,
         error: `Product with ID ${productId} not found.`
@@ -4245,31 +4437,31 @@ const generateBabyTryOnModal = async (req,res,next) => {
       formattedImages = typeof productData.product_images === "string"
         ? JSON.parse(productData.product_images || "[]")
         : productData.product_images || [];
-    } catch(e) {
+    } catch (e) {
       formattedImages = [];
     }
 
-    if(formattedImages.length === 0) {
-      throw new CoustomError("Product image URL not found in database records.",404)
+    if (formattedImages.length === 0) {
+      throw new CoustomError("Product image URL not found in database records.", 404)
     }
 
     const garment_url = formattedImages[0];
-    const getImageData = await getBase64FromUrl(garment_url,{
+    const getImageData = await getBase64FromUrl(garment_url, {
       "x-app-id": "BabyAiApp-Frontend-v1",
     });
 
-    if(!getImageData) {
+    if (!getImageData) {
       throw new Error("Failed to fetch image data from the third-party URL.");
     }
 
-    const cleanBase64 = getImageData.replace(/^data:image\/\w+;base64,/,"");
-    fs1.writeFileSync(tempDownloadedPath,cleanBase64,'base64');
+    const cleanBase64 = getImageData.replace(/^data:image\/\w+;base64,/, "");
+    fs1.writeFileSync(tempDownloadedPath, cleanBase64, 'base64');
     await sharp(tempDownloadedPath)
-      .resize(1024,1024)
+      .resize(1024, 1024)
       .jpeg({ quality: 70 })
       .toFile(compressedPath);
 
-    if(fs1.existsSync(tempDownloadedPath)) fs1.unlinkSync(tempDownloadedPath);
+    if (fs1.existsSync(tempDownloadedPath)) fs1.unlinkSync(tempDownloadedPath);
 
     const BABY_PROMPT = `
       Cute baby girl wearing uploaded dress.
@@ -4292,16 +4484,16 @@ const generateBabyTryOnModal = async (req,res,next) => {
       n: 1,
     });
 
-    if(fs1.existsSync(compressedPath)) fs1.unlinkSync(compressedPath);
+    if (fs1.existsSync(compressedPath)) fs1.unlinkSync(compressedPath);
     const b64Data = result.data[0].b64_json;
-    if(!b64Data) {
+    if (!b64Data) {
       throw new Error("The result isn't generated now please try again");
     }
 
     const savedFileName = `output-${Date.now()}.png`;
-    const savedFilePath = path.join(__dirname,'../../../files/avtarClothImage',savedFileName);
-    fs1.writeFileSync(savedFilePath,b64Data,'base64');
-    console.log("Image successfully saved at:",savedFilePath);
+    const savedFilePath = path.join(__dirname, '../../../files/avtarClothImage', savedFileName);
+    fs1.writeFileSync(savedFilePath, b64Data, 'base64');
+    console.log("Image successfully saved at:", savedFilePath);
     const relativeImagePath = `${savedFileName}`;
 
     const newImg = await ProductAIImage.create({
@@ -4310,20 +4502,20 @@ const generateBabyTryOnModal = async (req,res,next) => {
       product_id: productId
     });
 
-    sendResponse(res,"Image has been created now",201,{
+    sendResponse(res, "Image has been created now", 201, {
       imageName: savedFileName,
       savedPath: savedFilePath,
       dbRecord: newImg,
       response: result,
     })
 
-  } catch(error) {
-    console.error("Error inside generateBabyTryOnModal:",error);
-    if(fs1.existsSync(tempDownloadedPath)) {
-      try { fs1.unlinkSync(tempDownloadedPath); } catch(e) {}
+  } catch (error) {
+    console.error("Error inside generateBabyTryOnModal:", error);
+    if (fs1.existsSync(tempDownloadedPath)) {
+      try { fs1.unlinkSync(tempDownloadedPath); } catch (e) { }
     }
-    if(fs1.existsSync(compressedPath)) {
-      try { fs1.unlinkSync(compressedPath); } catch(e) {}
+    if (fs1.existsSync(compressedPath)) {
+      try { fs1.unlinkSync(compressedPath); } catch (e) { }
     }
     next(error)
   }
@@ -4824,15 +5016,15 @@ const generateBabyTryOnModal = async (req,res,next) => {
 //   }
 // };
 
-const genrateSingleImage = async (req,res,next) => {
+const genrateSingleImage = async (req, res, next) => {
   try {
-    if(!req.file) {
-      return res.status(400).json({ success: false,message: "Image is required" });
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "Image is required" });
     }
 
     const imagePath = req.file.path;
-    const generatedFolder = path.join(process.cwd(),"files/uploads/generated");
-    await fs.mkdir(generatedFolder,{ recursive: true });
+    const generatedFolder = path.join(process.cwd(), "files/uploads/generated");
+    await fs.mkdir(generatedFolder, { recursive: true });
 
     const visionResponse = await client.chat.completions.create({
       model: "gpt-4o",
@@ -4841,11 +5033,11 @@ const genrateSingleImage = async (req,res,next) => {
           role: "user",
           content: [
             {
-              type: "text",text: `Analyze the image. Detect all individual clothing items. 
+              type: "text", text: `Analyze the image. Detect all individual clothing items. 
             Return ONLY a JSON object in this format: 
             { "products": [ { "label": "string", "prompt_override": "string", "norm_box_2d": [ymin, xmin, ymax, xmax] } ] }
             Use 0-1000 scale for coordinates.` },
-            { type: "image_url",image_url: { url: `data:${req.file.mimetype};base64,${(await fs.readFile(imagePath)).toString("base64")}` } }
+            { type: "image_url", image_url: { url: `data:${req.file.mimetype};base64,${(await fs.readFile(imagePath)).toString("base64")}` } }
           ]
         }
       ],
@@ -4855,10 +5047,10 @@ const genrateSingleImage = async (req,res,next) => {
     const parsedData = JSON.parse(visionResponse.choices[0].message.content);
     const metadata = await sharp(imagePath).metadata();
     const generatedImages = [];
-    for(const [index,product] of parsedData.products.entries()) {
+    for (const [index, product] of parsedData.products.entries()) {
       try {
-        const [ymin,xmin,ymax,xmax] = product.norm_box_2d;
-        const croppedImagePath = path.join(generatedFolder,`crop_${Date.now()}_${index}.png`);
+        const [ymin, xmin, ymax, xmax] = product.norm_box_2d;
+        const croppedImagePath = path.join(generatedFolder, `crop_${Date.now()}_${index}.png`);
         const croppedBuffer = await sharp(imagePath)
           .extract({
             left: Math.round((xmin / 1000) * metadata.width),
@@ -4869,7 +5061,7 @@ const genrateSingleImage = async (req,res,next) => {
           .png()
           .toBuffer()
 
-        await fs.writeFile(croppedImagePath,croppedBuffer);
+        await fs.writeFile(croppedImagePath, croppedBuffer);
 
         const croppedBuffer1 =
           fs1.readFileSync(croppedImagePath);
@@ -4998,24 +5190,26 @@ const genrateSingleImage = async (req,res,next) => {
           // response_format: "b64_json",
         });
 
-        const finalImagePath = path.join(generatedFolder,`clean_${Date.now()}_${index}.png`);
-        const buffer = Buffer.from(imageResult.data[0].b64_json,"base64");
-        await fs.writeFile(finalImagePath,buffer);
+        const finalImagePath = path.join(generatedFolder, `clean_${Date.now()}_${index}.png`);
+        const buffer = Buffer.from(imageResult.data[0].b64_json, "base64");
+        await fs.writeFile(finalImagePath, buffer);
 
-        generatedImages.push({ label: product.label,clean_image: finalImagePath });
-      } catch(err) {
-        console.error(`Error processing item ${index}:`,err);
+        generatedImages.push({ label: product.label, clean_image: finalImagePath });
+      } catch (err) {
+        console.error(`Error processing item ${index}:`, err);
       }
     }
-    return res.status(200).json({ success: true,generatedImages });
-  } catch(error) {
-    console.error("GENERATE ERROR:",error);
+    return res.status(200).json({ success: true, generatedImages });
+  } catch (error) {
+    console.error("GENERATE ERROR:", error);
     next(error);
   }
 };
 
 module.exports = {
+  stripeWebhook,
   createCheckoutSessionForSubscription,
+  createCheckoutSessionAddOnePlan,
   sendOtpForLogin,
   verifyOtp,
   sendOtpForUpdatePhoneEmail,
@@ -5046,7 +5240,6 @@ module.exports = {
   removeFromCart,
   fetchAllCartItems,
   allFilterData,
-  proxyImage,
   generateAvatar,
   applayFilters,
   searchProduct,
@@ -5076,5 +5269,6 @@ module.exports = {
   generateBabyTryOnModal,
   allFitingRoomProduct,
   removeFromFitingRoom,
-  genrateSingleImage
+  genrateSingleImage,
+  getAllFitingRoomData
 };

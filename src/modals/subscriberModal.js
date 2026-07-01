@@ -2,12 +2,16 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('../../dbConfig');
 const User = require('./userModal');
 const Plan = require('./planModal');
+const Transaction = require('./transactionModal');
 
 const SubscriberShema = sequelize.define('Subscribers', {
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true
+    },
+    stripe_subscription_id: {
+        type: DataTypes.STRING
     },
     transaction_id: {
         type: DataTypes.STRING
@@ -16,6 +20,9 @@ const SubscriberShema = sequelize.define('Subscribers', {
         type: DataTypes.STRING
     },
     status: {
+        type: DataTypes.STRING
+    },
+    payment_status: {
         type: DataTypes.STRING
     },
     stripe_invoice_url: {
@@ -30,6 +37,12 @@ const SubscriberShema = sequelize.define('Subscribers', {
     end_date: {
         type: DataTypes.DATE
     },
+    cancelled_at: {
+        type: DataTypes.DATE
+    },
+    inner_transaction_id: {
+        type: DataTypes.INTEGER
+    }
 }, {
     tableName: 'Subscribers',
     timestamps: true
@@ -52,6 +65,15 @@ SubscriberShema.belongsTo(Plan, {
 });
 
 Plan.hasMany(SubscriberShema, { foreignKey: 'plan_id', as: 'plan' });
+
+// SubscriberShema.belongsTo(Transaction, {
+//     foreignKey: 'inner_transaction_id',
+//     as: 'subscriber_transaction',
+//     onDelete: 'SET NULL',
+//     onUpdate: 'CASCADE'
+// });
+
+// Transaction.hasMany(SubscriberShema, { foreignKey: 'inner_transaction_id', as: 'subscriber_transaction' });
 
 (async () => {
     try {

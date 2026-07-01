@@ -74,9 +74,9 @@ const User = sequelize.define(
       type: DataTypes.INTEGER,
       defaultValue: null,
     },
-    scan_token: {
+    daily_scan_token: {
       type: DataTypes.INTEGER,
-      defaultValue: 0
+      defaultValue: 2
     }
   },
   {
@@ -85,14 +85,14 @@ const User = sequelize.define(
   },
 );
 
-User.belongsTo(Plan, {
+User.belongsTo(Plan,{
   foreignKey: "active_plan_id",
   as: "subscriber",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 
-Plan.hasMany(User, {
+Plan.hasMany(User,{
   foreignKey: "active_plan_id",
   as: "subscriber",
   onDelete: "SET NULL",

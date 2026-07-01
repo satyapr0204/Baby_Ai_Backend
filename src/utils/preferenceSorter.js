@@ -197,22 +197,22 @@ const Color = require('../modals/ProductModal/color')
 
 const shuffleArray = (array) => {
     const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
+    for(let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        [shuffled[i],shuffled[j]] = [shuffled[j],shuffled[i]];
     }
     return shuffled;
 };
 
-const sortProductsByBabyPreference = async (products, babyId) => {
-    if (!products || products.length === 0) return [];
-    if (!babyId) return products;
+const sortProductsByBabyPreference = async (products,babyId) => {
+    if(!products || products.length === 0) return [];
+    if(!babyId) return products;
     try {
         const babyInstance = await BabyProfile.findOne({
             where: { id: babyId },
-            attributes: ['preferred_colors', 'fabric_preferences']
+            attributes: ['preferred_colors','fabric_preferences']
         });
-        if (!babyInstance) return products;
+        if(!babyInstance) return products;
         const babyData = babyInstance.dataValues ? babyInstance.dataValues : babyInstance;
 
         // let prefColorIds = [];
@@ -234,7 +234,7 @@ const sortProductsByBabyPreference = async (products, babyId) => {
         //     prefFabricIds = [];
         // }
 
-         let rawColors = babyData.preferred_colors;
+        let rawColors = babyData.preferred_colors;
         let prefColorIds = [];
 
         if(Array.isArray(rawColors)) {
@@ -245,8 +245,6 @@ const sortProductsByBabyPreference = async (products, babyId) => {
 
             prefColorIds = [rawColors];
         }
-
-
         let rawFabrics = babyData.fabric_preferences;
         let prefFabricIds = [];
 
@@ -255,7 +253,6 @@ const sortProductsByBabyPreference = async (products, babyId) => {
         } else if(typeof rawFabrics === 'string') {
             try { prefFabricIds = JSON.parse(rawFabrics); } catch(e) { prefFabricIds = []; }
         } else if(rawFabrics !== null && rawFabrics !== undefined) {
-
             prefFabricIds = [rawFabrics];
         }
 
@@ -263,7 +260,7 @@ const sortProductsByBabyPreference = async (products, babyId) => {
         prefFabricIds = prefFabricIds.map(Number);
 
         let prefColorNames = [];
-        if (prefColorIds.length > 0 && Color) {
+        if(prefColorIds.length > 0 && Color) {
             const dbColors = await Color.findAll({
                 where: { id: prefColorIds },
                 attributes: ['name'],
@@ -277,27 +274,27 @@ const sortProductsByBabyPreference = async (products, babyId) => {
         const getProductScore = (product) => {
             let score = 0;
             let hasPreferenceMatch = false;
-            if (prefColorNames.length > 0 && product.color) {
+            if(prefColorNames.length > 0 && product.color) {
                 let productColors = Array.isArray(product.color.name) ? product.color.name : [product.color.name || ''];
                 const hasColor = productColors.some(c =>
                     prefColorNames.includes(String(c).toLowerCase().trim())
                 );
-                if (hasColor) {
+                if(hasColor) {
                     score += 5;
                     hasPreferenceMatch = true;
                 }
             }
 
-            if (prefFabricIds.length > 0) {
+            if(prefFabricIds.length > 0) {
                 const fabricId = Number(product.fabric_id || product.fabric?.id);
-                if (prefFabricIds.includes(fabricId)) {
+                if(prefFabricIds.includes(fabricId)) {
                     score += 3;
                     hasPreferenceMatch = true;
                 }
             }
 
             const isBestSeller = product.is_best_seller === true || product.is_best_seller === 'true';
-            if (isBestSeller) {
+            if(isBestSeller) {
                 score += 100;
             }
             return {
@@ -309,16 +306,15 @@ const sortProductsByBabyPreference = async (products, babyId) => {
         const matchingProducts = products.filter(product => {
             const result = getProductScore(product);
             product._tempScore = result.score;
-            return result.isValid; 
+            return result.isValid;
         });
 
         let processedProducts = shuffleArray(matchingProducts);
-        processedProducts.sort((a, b) => b._tempScore - a._tempScore);
+        processedProducts.sort((a,b) => b._tempScore - a._tempScore);
         processedProducts.forEach(p => delete p._tempScore);
         return processedProducts;
-
-    } catch (error) {
-        console.error("Error in preference sorting logic:", error);
+    } catch(error) {
+        console.error("Error in preference sorting logic:",error);
         return [];
     }
 };

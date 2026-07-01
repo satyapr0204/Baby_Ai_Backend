@@ -8,6 +8,7 @@ const Color = require("../modals/ProductModal/color");
 const Size = require("../modals/ProductModal/size");
 const Brand = require("../modals/ProductModal/brand");
 const Cart = require("../modals/cartModal");
+const { BabyTRYON } = require("../modals/babyTryOn");
 
 const formatValue = (obj, isColor = false) => {
   if (!obj || !obj.name) return obj;
@@ -58,12 +59,27 @@ const getColorHex = (dbColorName) => {
   return colorMap[primaryColor] || "#D3D3D3";
 };
 
+const isTryOnGenrated = async (selected_baby, pId) => {
+  try {
+    const isTried = await BabyTRYON.findOne({
+      where: {
+        try_on_baby_id: selected_baby,
+        try_on_product_id: pId
+      }
+    })
+    return isTried ? true : false
+  } catch (error) {
+    throw error
+  }
+}
+
 const getCalculatedProductsWithSuffling = async ({
   category_id,
   product_id,
   user_id = null,
   productWhereData = {},
   requestedId = null,
+  selected_baby = null,
   page = 1,
   size = 10,
 }) => {
@@ -151,7 +167,8 @@ const getCalculatedProductsWithSuffling = async ({
     const firstProduct = JSON.parse(JSON.stringify(products));
     const firstRetailerData = firstProduct[0].retailers;
 
-    const calculatedList = products.map((product) => {
+    // const calculatedList = products.map((product) => {
+    const calculatedList = await Promise.all(products.map(async (product) => {
       const p = product.get({ plain: true });
       const category = p.categories;
       const productRetailer = p.retailers;
@@ -196,6 +213,8 @@ const getCalculatedProductsWithSuffling = async ({
       } catch (e) {
         formattedImages = [];
       }
+      
+      const isTry = await isTryOnGenrated(selected_baby, p.id)
 
       return {
         ...p,
@@ -210,6 +229,7 @@ const getCalculatedProductsWithSuffling = async ({
         product_images: formattedImages,
         is_fav: !!(p.wishlists && p.wishlists.length > 0),
         is_in_cart: !!(p.cart && p.cart.length > 0),
+        isTried: isTry,
         categories: undefined,
         retailers: undefined,
         wishlists: undefined,
@@ -217,7 +237,7 @@ const getCalculatedProductsWithSuffling = async ({
         product_url: undefined,
         msrp_price: undefined,
       };
-    });
+    }));
     const groupedProductsMap = new Map();
 
     // calculatedList.forEach((prod) => {
@@ -275,10 +295,10 @@ const getCalculatedProductsWithSuffling = async ({
       const isRequestedProduct = requestedId && Number(prod.id) === Number(requestedId);
       const sizeObj = prod.size
         ? {
-            id: prod.size.id,
-            name: Array.isArray(prod.size.name) ? prod.size.name[0] : prod.size.name,
-            product_id: prod.id,
-          }
+          id: prod.size.id,
+          name: Array.isArray(prod.size.name) ? prod.size.name[0] : prod.size.name,
+          product_id: prod.id,
+        }
         : null;
 
       if (!groupedProductsMap.has(productNameKey)) {

@@ -1,78 +1,7 @@
-// require("./dbConfig");
-// const dotenv = require("dotenv");
-// dotenv.config();
-// const express = require("express");
-// const PORT = process.env.PORT || 8080;
-// const app = express();
-// const cors = require("cors");
-// var morgan = require("morgan");
-// const path = require("path");
-// const helmet = require('helmet');
-// const compression = require('compression');
-// const rateLimit = require('express-rate-limit');
-
-// // Custom Error Handling
-// const CoustomError = require("./src/utils/CoustomError");
-// const { sendError } = require("./src/utils/coustomResponse");
-
-// // Routes Imports
-// // const dobaDataRoute = require("./src/routers/dobaDataRoute");
-// const admin = require("./src/routers/AdminRouters/adminRouters");
-// const user = require("./src/routers/UserRouters/userRoutes");
-// const productRoutes = require("./src/routers/ProductRouts/productRoutes");
-
-// // const { syncCategories, syncRetailers } = require("./cron-task");
-
-// // Middleware
-// app.use(cors());
-// app.use(morgan("dev"));
-// app.use(express.json());
-// app.use(express.urlencoded({ extended: true }));
-
-// // Cron Job
-// // syncCategories();
-// // syncRetailers();
-
-// // Log every incoming request for debugging
-// app.use((req, res, next) => {
-//   console.log(`[REQUEST] ${req.method} ${req.url}`);
-//   next();
-// });
-
-// // Image Acces from folder
-// app.use(
-//   "/baby-image",
-//   express.static(path.join(__dirname, "./src/BabyProfileImage")),
-// );
-// app.use("/banners", express.static(path.join(__dirname, "./src/Banners")));
-
-// // Routes
-// // app.use("/api/doba-data", dobaDataRoute);
-// // app.use("/api/admin", admin);
-// // app.use("/api/user", user);
-
-// app.use("/admin", admin);
-// app.use("/user", user);
-// app.use("/api/products", productRoutes);
-// // Global Error Handling Middleware
-// app.use((err, req, res, next) => {
-//   console.error("[ERROR]", err.message);
-//   if (!(err instanceof CoustomError)) {
-//     err = new CoustomError(
-//       err.message || "Internal Server Error",
-//       err.statusCode || 500,
-//     );
-//   }
-//   sendError(res, err);
-// });
-
-// app.listen(PORT, "127.0.0.1", () => {
-//   console.log(`Server is running on http://127.0.0.1:${PORT}`);
-// });
-
 require("./dbConfig");
 const dotenv = require("dotenv");
 dotenv.config();
+
 
 const express = require("express");
 const cors = require("cors");
@@ -90,8 +19,11 @@ const { sendError } = require("./src/utils/coustomResponse");
 const adminRoutes = require("./src/routers/AdminRouters/adminRouters");
 const userRoutes = require("./src/routers/UserRouters/userRoutes");
 const productRoutes = require("./src/routers/ProductRouts/productRoutes");
+const { stripeWebhook } = require("./src/controllers/UserControllers/controllers");
 
 const app = express();
+app.post('/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
+
 app.set("trust proxy", 1);
 const PORT = process.env.PORT || 8080;
 
@@ -131,6 +63,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+
 // ==========================================
 // 2. PERFORMANCE & LOGGING
 // ==========================================
@@ -160,8 +93,6 @@ const staticOptionsImg = {
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
   },
 };
-
-
 
 app.use(
   "/baby-image",

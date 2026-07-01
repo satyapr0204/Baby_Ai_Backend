@@ -1,122 +1,68 @@
+const userRouter = require("express").Router();
 const path = require("path");
-const {
-    sendOtpForLogin,
-    verifyOtp,
-    userProfile,
-    updateBabyProfileWithStep,
-    homeData,
-    allWishlistData,
-    addToWishlist,
-    deleteFromWishlist,
-    fetchProductDetails,
-    fetchBabyProfileData,
-    addNewUserAddress,
-    allSavedAddress,
-    updateUserAddress,
-    addressDetails,
-    deleteAddress,
-    setAsIsDefault,
-    deleteBabyProfile,
-    verifyPhoneEmailForUpdate,
-    sendOtpForUpdatePhoneEmail,
-    deleteMyProfile,
-    babyCategoryData,
-    productCategoryWiseData,
-    addToCart,
-    updatedQuantityInCart,
-    fetchAllCartItems,
-    removeFromCart,
-    fabricList,
-    colorsPreferenceList,
-    getAllSizes,
-    allFilterData,
-    proxyImage,
-    generateAvatar,
-    applayFilters,
-    selectBabyProfile,
-    staticPageDetails,
-    getAllPreferencesData,
-    helpAndSupport,
-    placeOrder,
-    createPaymentIntent,
-    createCheckoutSession,
-    verifyPayment,
-    fetchAllOrderedItems,
-    buyAgain,
-    createReorderCheckoutSession,
-    getAllOrders,
-    fetchOrderDetails,
-    cancelMyOrder,
-    getAllCountryCode,
-    getAllStateCode,
-    allProduct,
-    getRecommendedProduct,
-    generateBabyTryOn,
-    getOrder,
-    trackOrderC,
-    productCategoryWiseDataPagination,
-    generateBabyTryOnModal,
-    createCheckoutSessionForSubscription,
-    allFitingRoomProduct,
-    removeFromFitingRoom,
-    genrateSingleImage,
-    searchProduct,
-    getAllRecentlySearchedData,
-} = require("../../controllers/UserControllers/controllers");
-const {
-    getRecommendedSize,
-} = require("../../controllers/AiControllers/sizeController");
+
+// Middlewares 
 const { authenticateToken } = require("../../middleware/authMiddleware");
 const validateBody = require("../../middleware/validator");
-const multer = require("multer");
-const fs = require("fs");
-const {
-    getFaqs,
-    allStaticPages,
-    fetchAllPlans,
-} = require("../../controllers/AdminControllers/controllers");
 const createMulterStorage = require("../../utils/path-to-above-file");
+//Controllers require
+const {
+    sendOtpForLogin, verifyOtp, userProfile, updateBabyProfileWithStep, homeData, allWishlistData, addToWishlist, deleteFromWishlist, fetchProductDetails,
+    fetchBabyProfileData, addNewUserAddress, allSavedAddress, updateUserAddress, addressDetails, deleteAddress, setAsIsDefault, deleteBabyProfile,
+    verifyPhoneEmailForUpdate, sendOtpForUpdatePhoneEmail, deleteMyProfile, babyCategoryData, productCategoryWiseData, addToCart, updatedQuantityInCart,
+    fetchAllCartItems, removeFromCart, fabricList, colorsPreferenceList, getAllSizes, allFilterData, generateAvatar, applayFilters, selectBabyProfile,
+    staticPageDetails, getAllPreferencesData, helpAndSupport, placeOrder, createPaymentIntent, createCheckoutSession, verifyPayment, fetchAllOrderedItems,
+    buyAgain, createReorderCheckoutSession, getAllOrders, fetchOrderDetails, cancelMyOrder, getAllCountryCode, getAllStateCode, allProduct, getRecommendedProduct,
+    generateBabyTryOn, getOrder, trackOrderC, productCategoryWiseDataPagination, generateBabyTryOnModal, createCheckoutSessionForSubscription, allFitingRoomProduct,
+    removeFromFitingRoom, genrateSingleImage, searchProduct, getAllRecentlySearchedData,
+    getAllFitingRoomData,
+    createCheckoutSessionAddOnePlan, } = require("../../controllers/UserControllers/controllers");
+const { getRecommendedSize, } = require("../../controllers/AiControllers/sizeController");
+const { getFaqs, allStaticPages, fetchAllPlans, } = require("../../controllers/AdminControllers/controllers");
 
-const userRouter = require("express").Router();
-
-
-const uploadBabyProfileDir = path.join(__dirname,"../../../files/BabyProfileImage");
+const uploadBabyProfileDir = path.join(__dirname, "../../../files/BabyProfileImage");
 const uploadBabyImage = createMulterStorage(uploadBabyProfileDir);
 
-const uploadProfileAvatarDir = path.join(__dirname,"../../../files/ProfileAvatarImage");
+const uploadProfileAvatarDir = path.join(__dirname, "../../../files/ProfileAvatarImage");
 const uploadUserAvatar = createMulterStorage(uploadProfileAvatarDir);
 
 // Taking plan data for subscription
-userRouter.post('/init-subscription',authenticateToken,createCheckoutSessionForSubscription);
+userRouter.post(
+    '/init-subscription',
+    authenticateToken,
+    createCheckoutSessionForSubscription,
+);
+
+userRouter.post('/add-on-token', authenticateToken, createCheckoutSessionAddOnePlan)
 
 // Auth api
 userRouter.post(
     "/send-otp",
-    validateBody(["input","name","channel"]),
+    validateBody(["input", "name", "channel"]),
     sendOtpForLogin,
 );
 
 userRouter.post(
     "/verify-otp",
-    validateBody(["input","otp","token","device_type"]),
+    validateBody(["input", "otp", "token", "device_type"]),
     verifyOtp,
 );
 
 userRouter.post(
     "/send-otp-for-update",
     authenticateToken,
-    validateBody(["input","channel"]),
+    validateBody(["input", "channel"]),
     sendOtpForUpdatePhoneEmail,
 );
 
 userRouter.post(
     "/verify-phone-email",
     authenticateToken,
-    validateBody(["otp","token"]),
+    validateBody(["otp", "token"]),
     verifyPhoneEmailForUpdate,
 );
 
-userRouter.get("/fabric-preference-list",authenticateToken,fabricList);
+userRouter.get("/fabric-preference-list", authenticateToken, fabricList);
 
 userRouter.get(
     "/colors-preference-list",
@@ -124,12 +70,12 @@ userRouter.get(
     colorsPreferenceList,
 );
 
-userRouter.get("/preferences",authenticateToken,getAllPreferencesData);
+userRouter.get("/preferences", authenticateToken, getAllPreferencesData);
 
-userRouter.get("/size-list",authenticateToken,getAllSizes);
+userRouter.get("/size-list", authenticateToken, getAllSizes);
 
 // User profile api
-userRouter.get("/user-profile",authenticateToken,userProfile);
+userRouter.get("/user-profile", authenticateToken, userProfile);
 
 userRouter.post(
     "/baby-profile-update-step",
@@ -138,10 +84,10 @@ userRouter.post(
     updateBabyProfileWithStep,
 );
 
-userRouter.get("/home-data",authenticateToken,homeData);
+userRouter.get("/home-data", authenticateToken, homeData);
 
 // Wish list api
-userRouter.get("/wishlist-data",authenticateToken,allWishlistData);
+userRouter.get("/wishlist-data", authenticateToken, allWishlistData);
 
 userRouter.post(
     "/add-wishlist",
@@ -166,7 +112,7 @@ userRouter.post(
 );
 
 // Category api
-userRouter.get("/categories",authenticateToken,babyCategoryData);
+userRouter.get("/categories", authenticateToken, babyCategoryData);
 
 userRouter.post(
     "/category-products",
@@ -182,7 +128,6 @@ userRouter.post(
     productCategoryWiseDataPagination,
 );
 
-userRouter.get("/proxy-image",proxyImage);
 
 // Baby profile api
 userRouter.post(
@@ -199,7 +144,7 @@ userRouter.post(
     deleteBabyProfile,
 );
 
-userRouter.post("/delete-my-profile",authenticateToken,deleteMyProfile);
+userRouter.post("/delete-my-profile", authenticateToken, deleteMyProfile);
 
 // User Address Api
 userRouter.post(
@@ -219,7 +164,7 @@ userRouter.post(
     addNewUserAddress,
 );
 
-userRouter.get("/saved-address",authenticateToken,allSavedAddress);
+userRouter.get("/saved-address", authenticateToken, allSavedAddress);
 
 userRouter.post(
     "/update-address",
@@ -253,14 +198,14 @@ userRouter.post(
 userRouter.post(
     "/add-to-cart",
     authenticateToken,
-    validateBody(["id","quantity"]),
+    validateBody(["id", "quantity"]),
     addToCart,
 );
 
 userRouter.post(
     "/update-cart-quantity",
     authenticateToken,
-    validateBody(["id","quantity"]),
+    validateBody(["id", "quantity"]),
     updatedQuantityInCart,
 );
 
@@ -271,17 +216,17 @@ userRouter.post(
     removeFromCart,
 );
 
-userRouter.get("/fetch-cart-items",authenticateToken,fetchAllCartItems);
+userRouter.get("/fetch-cart-items", authenticateToken, fetchAllCartItems);
 
-userRouter.get("/my-closet",authenticateToken,fetchAllOrderedItems);
+userRouter.get("/my-closet", authenticateToken, fetchAllOrderedItems);
 
-userRouter.get("/filter-data",authenticateToken,allFilterData);
+userRouter.get("/filter-data", authenticateToken, allFilterData);
 
-userRouter.post("/filter",authenticateToken,applayFilters);
+userRouter.post("/filter", authenticateToken, applayFilters);
 
-userRouter.post('/search-product',validateBody(["search_text"]),authenticateToken,searchProduct)
+userRouter.post('/search-product', validateBody(["search_text"]), authenticateToken, searchProduct)
 
-userRouter.get('/recent-search-data',authenticateToken,getAllRecentlySearchedData)
+userRouter.get('/recent-search-data', authenticateToken, getAllRecentlySearchedData)
 
 userRouter.post(
     "/select-baby-profile",
@@ -291,9 +236,9 @@ userRouter.post(
 );
 
 // For static pages
-userRouter.get("/faqs",authenticateToken,getFaqs);
+userRouter.get("/faqs", authenticateToken, getFaqs);
 
-userRouter.get("/all-static-pages",authenticateToken,allStaticPages);
+userRouter.get("/all-static-pages", authenticateToken, allStaticPages);
 
 userRouter.post(
     "/help-and-support",
@@ -328,7 +273,7 @@ userRouter.post(
 userRouter.post(
     "/place-order",
     authenticateToken,
-    validateBody(["id","shipping_address_id"]),
+    validateBody(["id", "shipping_address_id"]),
     // createPaymentIntent,
     createCheckoutSession,
     // placeOrder,
@@ -341,16 +286,16 @@ userRouter.post(
     buyAgain,
 );
 
-userRouter.post("/re-order",authenticateToken,createReorderCheckoutSession);
+userRouter.post("/re-order", authenticateToken, createReorderCheckoutSession);
 
-userRouter.get("/fetch-all-orders",authenticateToken,getAllOrders);
+userRouter.get("/fetch-all-orders", authenticateToken, getAllOrders);
 
-userRouter.post("/order-details",authenticateToken,fetchOrderDetails);
+userRouter.post("/order-details", authenticateToken, fetchOrderDetails);
 
 userRouter.post(
     "/cancel-order",
     authenticateToken,
-    validateBody(["id","reason"]),
+    validateBody(["id", "reason"]),
     cancelMyOrder,
 );
 
@@ -361,9 +306,9 @@ userRouter.post(
     verifyPayment,
 );
 
-userRouter.get("/all-country-code",authenticateToken,getAllCountryCode);
+userRouter.get("/all-country-code", authenticateToken, getAllCountryCode);
 
-userRouter.post("/state-code",authenticateToken,getAllStateCode);
+userRouter.post("/state-code", authenticateToken, getAllStateCode);
 
 // Ai Servicess
 // userRouter.post("/predict-size", authenticateToken, getRecommendedSize);
@@ -371,27 +316,29 @@ userRouter.post("/state-code",authenticateToken,getAllStateCode);
 userRouter.post(
     "/predict-size",
     authenticateToken,
-    validateBody(["landmarks","image_height","image_width"]),
+    validateBody(["landmarks", "image_height", "image_width"]),
     getRecommendedProduct,
 );
 
-userRouter.get("/all-product",allProduct);
+userRouter.get("/all-product", allProduct);
 
-userRouter.get('/plans',authenticateToken,fetchAllPlans);
+userRouter.get('/plans', authenticateToken, fetchAllPlans);
 
 // AI Related Routers
-userRouter.post("/test-bambani-order",authenticateToken,getOrder);
+userRouter.post("/test-bambani-order", authenticateToken, getOrder);
 
-userRouter.get("/track-order",authenticateToken,trackOrderC);
+userRouter.get("/track-order", authenticateToken, trackOrderC);
 
-userRouter.post("/try-on",authenticateToken,generateBabyTryOn);
+userRouter.post("/try-on", authenticateToken, generateBabyTryOn);
 
-userRouter.get('/fiting-room-data',authenticateToken,allFitingRoomProduct);
+userRouter.get('/fiting-room-data', authenticateToken, allFitingRoomProduct);
 
-userRouter.post('/remove-from-fiting-room',authenticateToken,removeFromFitingRoom);
+userRouter.get('/all-fiting-room-data', authenticateToken, getAllFitingRoomData)
 
-userRouter.post("/create-baby-modal",uploadUserAvatar.single("BabyModalImage"),generateBabyTryOnModal);
+userRouter.post('/remove-from-fiting-room', authenticateToken, removeFromFitingRoom);
 
-userRouter.post('/saprate-product-image',uploadUserAvatar.single("productImage"),genrateSingleImage);
+userRouter.post("/create-baby-modal", uploadUserAvatar.single("BabyModalImage"), generateBabyTryOnModal);
+
+userRouter.post('/saprate-product-image', uploadUserAvatar.single("productImage"), genrateSingleImage);
 
 module.exports = userRouter;

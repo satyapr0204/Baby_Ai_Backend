@@ -16,21 +16,24 @@ const Transaction = sequelize.define(
     stripe_session_id: {
       type: DataTypes.STRING,
       // unique: true,
-      allowNull: false,
+      // allowNull: false,
     },
     transaction_id: {
       type: DataTypes.STRING,
     },
-    payment_intent_id: {
+    stripe_payment_intent_id: {
       type: DataTypes.STRING,
     },
-    invoice_id: {
+    stripe_invoice_id: {
       type: DataTypes.STRING,
     },
-    invoice_url: {
+    stripe_invoice_url: {
       type: DataTypes.TEXT,
     },
-    amount: {
+    stripe_invoice_pdf: {
+      type: DataTypes.TEXT,
+    },
+    total_amount: {
       type: DataTypes.FLOAT,
     },
     status: {
@@ -39,6 +42,18 @@ const Transaction = sequelize.define(
     payment_method: {
       type: DataTypes.STRING,
     },
+    paid_at: {
+      type: DataTypes.DATE
+    },
+    stripe_charge_id: {
+      type: DataTypes.STRING,
+    },
+    payment_method_id: {
+      type: DataTypes.STRING,
+    },
+    type: {
+      type: DataTypes.STRING,
+    }
   },
   {
     tableName: "transactions",
@@ -50,8 +65,8 @@ Transaction.belongsTo(User, { as: "user", foreignKey: "user_id" });
 Transaction.belongsTo(Order, { as: "order", foreignKey: "order_id" });
 Transaction.belongsTo(Subscriber, { as: "subscription", foreignKey: "subscription_id" });
 Subscriber.hasOne(Transaction, { as: "subscription", foreignKey: "subscription_id" });
-Transaction.belongsTo(Plan, { as: "subscriptionPlan", foreignKey: "subscription_plan_id" });
-Plan.hasOne(Transaction, { as: "subscriptionPlan", foreignKey: "subscription_plan_id" });
+// Transaction.belongsTo(Plan, { as: "subscriptionPlan", foreignKey: "subscription_plan_id" });
+// Plan.hasOne(Transaction, { as: "subscriptionPlan", foreignKey: "subscription_plan_id" });
 Order.hasOne(Transaction, { as: "transaction", foreignKey: "order_id" });
 
 (async () => {

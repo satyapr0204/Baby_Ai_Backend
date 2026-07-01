@@ -1,25 +1,23 @@
-const Admin = require("../../modals/adminsModal");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const bcrypt = require("bcrypt");
+const { Op, QueryTypes } = require("sequelize");
+const { sequelize } = require("../../../dbConfig");
 const jwt = require("jsonwebtoken");
-const { sendResponse } = require("../../utils/coustomResponse");
-const CoustomError = require("../../utils/CoustomError");
+const bcrypt = require("bcrypt");
+const fs = require("fs").promises;
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const path = require("path");
+
+// Modals
+const Admin = require("../../modals/adminsModal");
 const User = require("../../modals/userModal");
 const FAQ = require("../../modals/faqModal");
 const StaticPage = require("../../modals/staticPageModal");
 const BabyProfile = require("../../modals/babyProfileModal");
-const { sequelize } = require("../../../dbConfig");
 const Category = require("../../modals/ProductModal/category");
 const Product = require("../../modals/ProductModal/product");
 const Banner = require("../../modals/bannerModal");
-const path = require("path");
-const { formatDate } = require("../../utils/formatDateHelper");
-const fs = require("fs").promises;
-const { Op, QueryTypes } = require("sequelize");
 const MinAndMax = require("../../modals/minAndMaxModal");
 const FlashMessage = require("../../modals/flashMessageModal");
 const FlashMessageEnable = require("../../modals/flashMessageEnableModa");
-const { calculateSafeMargin } = require("../../utils/calculatePricing");
 const Retailer = require("../../modals/ProductModal/retailer");
 const Fabric = require("../../modals/ProductModal/fabric");
 const Color = require("../../modals/ProductModal/color");
@@ -29,6 +27,14 @@ const Address = require("../../modals/addressModal");
 const Transaction = require("../../modals/transactionModal");
 const SubscriberShema = require("../../modals/subscriberModal");
 
+// Servicess
+const { formatDate } = require("../../utils/formatDateHelper");
+const { sendResponse } = require("../../utils/coustomResponse");
+const { calculateSafeMargin } = require("../../utils/calculatePricing");
+const CoustomError = require("../../utils/CoustomError");
+const AddOnToken = require("../../modals/addOneTokenPlan");
+
+// Healper functions
 const processBabyData = async (data) => {
   if (!data) return data;
 
@@ -136,6 +142,7 @@ const processBabyData = async (data) => {
   return isArray ? rawData : rawData[0];
 };
 
+// Controllers
 const adminLogin = async (req, res, next) => {
   try {
     const { email, password, is_login } = req.body;
@@ -1668,13 +1675,30 @@ const fetchAllPlans = async (req, res, next) => {
 const createNewPlane = async (req, res, next) => {
   try {
     const { plan_name, duraction, price, features, token_count } = req.body;
-    
+
+    if (!(duraction == 'month'))
+      throw new CoustomError('duraction is invalid please correct it', 400);
+
+    const product = await stripe.products.create({
+      name: plan_name,
+      description: `Plan with ${token_count} tokens`,
+    });
+
+    const stripePrice = await stripe.prices.create({
+      unit_amount: Math.round(price * 100),
+      currency: 'usd',
+      recurring: { interval: duraction },
+      product: product.id,
+    });
+
     await Plan.create({
       plan_name,
       duraction,
       price,
       features,
-      token_count
+      token_count,
+      stripe_product_id: product.id,
+      stripe_price_id: stripePrice.id
     });
 
     sendResponse(res, "Plan has been created successfully", 201);
@@ -1682,40 +1706,141 @@ const createNewPlane = async (req, res, next) => {
     next(error);
   }
 };
+const createAddOnPlane = async (req, res, next) => {
+  try {
+    const { plan_name, price, token_count } = req.body;
+
+    const addNew = await AddOnToken.create({
+      plan_name,
+      price,
+      token_count
+    })
+
+    sendResponse(res, "Your plan has been created now", 201)
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateAddOnPlane = async (req, res, next) => {
+  try {
+    const { id, plan_name, price, token_count } = req.body;
+
+    const isExitsPlan = await AddOneToken.findOne({
+      where: {
+        id
+      }
+    })
+
+    const addNew = await AddOnToken.create({
+      plan_name: plan_name ? plan_name : isExitsPlan.plan_name,
+      price: price ? price : isExitsPlan.price,
+      token_count: token_count ? token_count : isExitsPlan.token_count
+    })
+
+    sendResponse(res, "Your plan has been updated now", 201)
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteAddOnPlan = async (req, res, next) => {
+  try {
+
+    const { id } = req.body
+
+    const isExists = await AddOnToken.findOne({
+      where: {
+        id
+      }
+    })
+
+    if (!isExists) throw new CoustomError('Plan not found', 404);
+
+    await isExists.destroy();
+
+    sendResponse(res, "Your plan has beed deleted now", 200)
+
+  } catch (error) {
+    next(error)
+  }
+}
+
+// const updatePlan = async (req, res, next) => {
+//   try {
+//     const { id, plan_name, price, features, is_active } = req.body;
+//     const isExitsPlan = await Plan.findOne({
+//       where: {
+//         id,
+//         // is_active: 1,
+//       },
+//     });
+//     if (!isExitsPlan) throw new CoustomError("Plan isn't avilible", 400);
+
+//     let updatedStripePriceId = isExitsPlan.stripe_price_id;
+
+//     if (price && Number(price) !== Number(isExitsPlan.price)) {
+//       console.log(`Price changed from ${isExitsPlan.price} to ${price}. Creating new price on Stripe...`);
+//       let stripeProductId = isExitsPlan.stripe_product_id;
+//       if (!stripeProductId && isExitsPlan.stripe_price_id) {
+//         const oldPriceDetails = await stripe.prices.retrieve(isExitsPlan.stripe_price_id);
+//         stripeProductId = oldPriceDetails.product;
+//       }
+//       const newStripePrice = await stripe.prices.create({
+//         unit_amount: Math.round(Number(price) * 100),
+//         currency: 'usd',
+//         product: stripeProductId,
+//       });
+//       updatedStripePriceId = newStripePrice.id;
+//     }
+
+//     await isExitsPlan.update({
+//       plan_name: plan_name !== undefined ? plan_name : isExitsPlan.plan_name,
+//       price: price !== undefined ? price : isExitsPlan.price,
+//       stripe_price_id: updatedStripePriceId,
+//       features: features !== undefined ? features : isExitsPlan.features,
+//       is_active: is_active !== undefined ? is_active : isExitsPlan.is_active,
+//     });
+
+//     sendResponse(res, "Your plan has been updated successfully", 200);
+//   } catch (error) {
+//     next(error);
+//   }
+// };
 
 const updatePlan = async (req, res, next) => {
   try {
     const { id, plan_name, price, features, is_active } = req.body;
-    const isExitsPlan = await Plan.findOne({
-      where: {
-        id,
-        // is_active: 1,
-      },
-    });
-    if (!isExitsPlan) throw new CoustomError("Plan isn't avilible", 400);
+    const isExitsPlan = await Plan.findOne({ where: { id } });
+
+    if (!isExitsPlan) throw new CoustomError("Plan isn't available", 400);
 
     let updatedStripePriceId = isExitsPlan.stripe_price_id;
+    if (plan_name && plan_name !== isExitsPlan.plan_name && isExitsPlan.stripe_product_id) {
+      await stripe.products.update(isExitsPlan.stripe_product_id, { name: plan_name });
+    }
 
     if (price && Number(price) !== Number(isExitsPlan.price)) {
-      console.log(`Price changed from ${isExitsPlan.price} to ${price}. Creating new price on Stripe...`);
-      let stripeProductId = isExitsPlan.stripe_product_id;
-      if (!stripeProductId && isExitsPlan.stripe_price_id) {
-        const oldPriceDetails = await stripe.prices.retrieve(isExitsPlan.stripe_price_id);
-        stripeProductId = oldPriceDetails.product;
-      }
+      console.log("Price changed. Creating new Stripe price...");
+
+      await stripe.prices.update(isExitsPlan.stripe_price_id, { active: false });
       const newStripePrice = await stripe.prices.create({
         unit_amount: Math.round(Number(price) * 100),
         currency: 'usd',
-        product: stripeProductId,
+        product: isExitsPlan.stripe_product_id,
+        recurring: { interval: 'month' }
       });
+
       updatedStripePriceId = newStripePrice.id;
     }
 
     await isExitsPlan.update({
-      plan_name: plan_name !== undefined ? plan_name : isExitsPlan.plan_name,
-      price: price !== undefined ? price : isExitsPlan.price,
+      plan_name: plan_name || isExitsPlan.plan_name,
+      price: price || isExitsPlan.price,
       stripe_price_id: updatedStripePriceId,
-      features: features !== undefined ? features : isExitsPlan.features,
+      features: features || isExitsPlan.features,
       is_active: is_active !== undefined ? is_active : isExitsPlan.is_active,
     });
 
@@ -1724,6 +1849,8 @@ const updatePlan = async (req, res, next) => {
     next(error);
   }
 };
+
+
 
 const cancelOrder = async (req, res, next) => {
   try {
@@ -1787,6 +1914,9 @@ module.exports = {
   getAllTransactions,
   fetchAllPlans,
   createNewPlane,
+  createAddOnPlane,
+  deleteAddOnPlan,
+  updateAddOnPlane,
   updatePlan,
   cancelOrder,
 };

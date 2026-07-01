@@ -42,6 +42,7 @@ const {
   createNewPlane,
   updatePlan,
   cancelOrder,
+  createAddOnPlane,
 } = require("../../controllers/AdminControllers/controllers");
 
 const { authenticateToken } = require("../../middleware/authMiddleware");
@@ -257,15 +258,36 @@ adminRouter.get("/orders", authenticateToken, getAllOrderData);
 
 adminRouter.get("/transactions", authenticateToken, getAllTransactions);
 
-adminRouter.get("/get-data", getAllData);
+adminRouter.get("/get-data", getAllData)
 
 adminRouter.get("/all-plans", authenticateToken, fetchAllPlans);
 
 adminRouter.post(
   "/create-plan",
   authenticateToken,
-  validateBody(["plan_name", "duraction", "price", "features","token_count"]),
+  validateBody(["plan_name", "duraction", "price", "features", "token_count"]),
   createNewPlane,
+);
+
+adminRouter.post(
+  "/create-add-on-plan",
+  authenticateToken,
+  validateBody(["plan_name", "price", "token_count"]),
+  createAddOnPlane,
+);
+
+adminRouter.post(
+  "/update-add-on-plan",
+  authenticateToken,
+  validateBody(["id"]),
+  createAddOnPlane,
+);
+
+adminRouter.post(
+  "/delete-add-on-plan",
+  authenticateToken,
+  validateBody(["id"]),
+  createAddOnPlane,
 );
 
 adminRouter.post(

@@ -30,6 +30,16 @@ const Plan = sequelize.define(
     token_count: {
       type: DataTypes.INTEGER,
       defaultValue: 0
+    },
+    stripe_price_id: {
+      type: DataTypes.STRING
+    },
+    stripe_product_id: {
+      type: DataTypes.STRING
+    },
+    is_premium: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
     }
 
   },
